@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DayTrade Pro Terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+  <div class="terminal-container">
+    <!-- Header -->
+    <header class="terminal-header">
+      <div class="header-left">
+        <span class="ticker-input">DAYTRADE_PRO &gt; ENTER TICKER</span>
+      </div>
+      <div class="header-right">
+        <span>CAP &yen; 10,000,000</span>
+        <span>SLOT &yen;0 x 5</span>
+        <span id="header-rlz" class="text-green">RLZ &yen;0</span>
+        <span id="header-unrlz" class="text-green">UNRLZ &yen;0</span>
+        <span id="header-time">00:00:00</span>
+        <span class="live-badge" id="live-badge">LIVE SIM</span>
+      </div>
+    </header>
+
+    <!-- Top Left: Watchlist -->
+    <section class="panel panel-watchlist">
+      <div class="resize-handle-y"></div>
+      <div class="panel-header">MON - WATCHLIST</div>
+      <div id="watchlist-grid" class="watchlist-grid">
+        <!-- Cards injected via JS -->
+      </div>
+    </section>
+
+    <!-- Right: Trade Log -->
+    <section class="panel panel-log">
+      <div class="resize-handle-x"></div>
+      <div class="panel-header" style="display: flex; justify-content: space-between;">
+        <span>BLOT - 取引履歴</span>
+        <span id="panel-unrlz">含み損益: &yen;0</span>
+      </div>
+      <div class="log-table-container">
+        <table class="log-table">
+          <thead>
+            <tr>
+              <th>TIME</th>
+              <th>TICKER</th>
+              <th>B/S</th>
+              <th>QTY</th>
+              <th>PRICE</th>
+              <th>P/L</th>
+            </tr>
+          </thead>
+          <tbody id="trade-log-body">
+            <!-- Logs injected via JS -->
+          </tbody>
+        </table>
+      </div>
+
+    </section>
+
+    <!-- Middle: Main Chart -->
+    <section class="panel panel-chart">
+      <div class="panel-header">
+        <span id="chart-title">GP - CHART</span>
+        <span class="chart-timeframe">INTRADAY 1M</span>
+      </div>
+      <div id="main-chart" class="chart-container"></div>
+    </section>
+
+    <!-- Bottom: Detailed Stats -->
+    <section class="panel panel-stats">
+      <div class="panel-header">DES - 銘柄詳細</div>
+      <div class="stats-table-container">
+        <table class="stats-table">
+          <thead>
+            <tr id="stats-header-row">
+              <th class="stats-label">指標</th>
+              <!-- Tickers injected via JS -->
+            </tr>
+          </thead>
+          <tbody id="stats-body">
+            <!-- Rows injected via JS -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+  
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

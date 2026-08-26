@@ -1,0 +1,10 @@
+# 認証情報。絶対にコミットしない
+config/secrets.env
+*.har
+# キャッシュ・ログ
+data/
+logs/
+__pycache__/
+*.pyc
+web/node_modules/
+web/dist/

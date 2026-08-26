@@ -1,0 +1,18 @@
+# DayTrade Pro のダッシュボードを daytrade-pro.com に出す設定。
+#
+#   cloudflared tunnel --config config/cloudflared.yml run daytrade-pro
+#
+# トンネルは「外向きに」接続するので、ルータやファイアウォールに穴を開けない。
+# データはローカルに置いたまま、127.0.0.1:8787 の内容だけが配信される。
+#
+# DNS は既に daytrade-pro.com → このトンネルに向いている（DNS 変更は不要）。
+# 未接続のときブラウザに出る「error code: 1033」は、その状態を指す。
+tunnel: 1d643e94-b3b6-44cc-9da6-68793da27f15
+credentials-file: /home/shogo/.cloudflared/1d643e94-b3b6-44cc-9da6-68793da27f15.json
+
+ingress:
+  - hostname: daytrade-pro.com
+    service: http://127.0.0.1:8787
+  - hostname: www.daytrade-pro.com
+    service: http://127.0.0.1:8787
+  - service: http_status:404
