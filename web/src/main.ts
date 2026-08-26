@@ -84,7 +84,7 @@ function renderWatchlist() {
         ${formatYen(target.latest_price)} <span class="pct">${sign}${pctChange.toFixed(2)}%</span>
       </div>
       <div style="font-size: 10px; color: #9ca3af; margin-bottom: 8px;">
-        投入額: &yen;${formatYen(target.entry_price * target.shares)} (${target.shares}株)
+        Position Size: &yen;${formatYen(target.entry_price * target.shares)} (${target.shares} shares)
       </div>
       
       <div class="progress-section">
@@ -189,7 +189,7 @@ function updateUnrealizedPnL() {
   headerUnrlz.innerHTML = `UNRLZ <span class="${pnlColor}">${formatted}</span>`;
   headerUnrlz.className = pnlColor;
   
-  panelUnrlz.innerHTML = `含み損益: <span class="${pnlColor}">${formatted}</span>`;
+  panelUnrlz.innerHTML = `UNREALIZED P&L: <span class="${pnlColor}">${formatted}</span>`;
 }
 
 function renderStats() {
@@ -209,12 +209,12 @@ function renderStats() {
   });
 
   const rows = [
-    { label: '現在値 (Current)', key: 'latest_price' },
-    { label: '利確目標 (TP)', key: 'target' },
-    { label: 'エントリー (Entry)', key: 'entry_price' },
-    { label: '損切 (SL)', key: 'stop' },
-    { label: '想定ロット', key: 'shares' },
-    { label: 'ステータス', key: 'status' }
+    { label: 'Current Price', key: 'latest_price' },
+    { label: 'Take Profit (TP)', key: 'target' },
+    { label: 'Entry Price', key: 'entry_price' },
+    { label: 'Stop Loss (SL)', key: 'stop' },
+    { label: 'Lot Size', key: 'shares' },
+    { label: 'Status', key: 'status' }
   ];
 
   statsBody.innerHTML = '';
