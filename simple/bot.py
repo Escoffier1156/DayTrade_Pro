@@ -23,6 +23,7 @@ SECRETS_FILE = ROOT / "config" / "secrets.env"
 UNIVERSE_FILE = DATA_DIR / "universe_latest.json"
 TARGETS_FILE = DATA_DIR / "today_targets.json"
 HISTORY_FILE = DATA_DIR / "trade_history.json"
+STATE_FILE = DATA_DIR / "bot_state.json"
 
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 
@@ -50,6 +51,22 @@ _TR = re.compile(r"<tr[^>]*>(.*?)</tr>", re.S)
 _CELL = re.compile(r"<t[hd][^>]*>(.*?)</t[hd]>", re.S)
 
 # --- Common Utilities ---
+def get_last_run(job_name: str) -> str:
+    if STATE_FILE.exists():
+        try:
+            state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+            return state.get(job_name)
+        except: pass
+    return None
+
+def set_last_run(job_name: str, date_str: str):
+    state = {}
+    if STATE_FILE.exists():
+        try: state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        except: pass
+    state[job_name] = date_str
+    with open(STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
 def load_env(name: str) -> str:
     v = os.environ.get(name)
     if v:
@@ -411,10 +428,6 @@ def main():
     print("=== DayTrade Pro Master Bot Started ===")
     print("Bot is now running continuously and waiting for scheduled tasks...")
     
-    last_run_fetch = None
-    last_run_screener = None
-    last_run_report = None
-    
     iteration_count = 0
     is_monitoring = False
     
@@ -425,18 +438,18 @@ def main():
             time_hm = now.hour * 100 + now.minute
             
             # --- 23:00 : fetch_yesterday (Generate J-Quants Universe) ---
-            if now.hour == 23 and now.minute >= 0 and last_run_fetch != today_str:
+            if now.hour == 23 and now.minute >= 0 and get_last_run("fetch") != today_str:
                 print(f"[{now.strftime('%H:%M:%S')}] Executing: run_fetch_yesterday()")
                 try: run_fetch_yesterday()
                 except Exception as e: print(f"fetch_yesterday Error: {e}")
-                last_run_fetch = today_str
+                set_last_run("fetch", today_str)
                 
             # --- 09:05 : morning_screener (Kabutan Screening) ---
-            if now.hour == 9 and now.minute >= 5 and now.minute < 30 and last_run_screener != today_str:
+            if now.hour == 9 and now.minute >= 5 and now.minute < 30 and get_last_run("screener") != today_str:
                 print(f"[{now.strftime('%H:%M:%S')}] Executing: run_morning_screener()")
                 try: run_morning_screener()
                 except Exception as e: print(f"morning_screener Error: {e}")
-                last_run_screener = today_str
+                set_last_run("screener", today_str)
                 
             # --- 08:55 ~ 11:30, 12:30 ~ 15:30 : intraday_monitor (Intraday Monitoring) ---
             if (855 <= time_hm < 1130) or (1230 <= time_hm <= 1530):
@@ -453,11 +466,11 @@ def main():
                     is_monitoring = False
             
             # --- 15:40 : daily_report (Daily Report) ---
-            if now.hour == 15 and now.minute >= 40 and last_run_report != today_str:
+            if now.hour == 15 and now.minute >= 40 and get_last_run("report") != today_str:
                 print(f"[{now.strftime('%H:%M:%S')}] Executing: run_daily_report()")
                 try: run_daily_report()
                 except Exception as e: print(f"daily_report Error: {e}")
-                last_run_report = today_str
+                set_last_run("report", today_str)
                 
             time.sleep(1)
             
