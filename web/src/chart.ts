@@ -1,9 +1,10 @@
-import { createChart, IChartApi, ISeriesApi, LineStyle, CrosshairMode, ColorType, AreaSeries, createSeriesMarkers } from 'lightweight-charts';
+import { createChart, IChartApi, ISeriesApi, LineStyle, CrosshairMode, ColorType, AreaSeries, LineSeries, createSeriesMarkers } from 'lightweight-charts';
 import type { Target } from './types';
 
 export class TargetChart {
   private chart: IChartApi;
   private areaSeries: ISeriesApi<"Area">;
+  private dummySeries: ISeriesApi<"Line">;
   private markersPrimitive: any = null;
 
   constructor(container: HTMLElement) {
@@ -38,6 +39,15 @@ export class TargetChart {
       topColor: 'rgba(245, 158, 11, 0.3)',
       bottomColor: 'rgba(245, 158, 11, 0.0)',
       lineWidth: 2,
+    });
+
+    this.dummySeries = this.chart.addSeries(LineSeries, {
+      color: 'transparent',
+      priceScaleId: 'dummy',
+      crosshairMarkerVisible: false,
+    });
+    this.chart.priceScale('dummy').applyOptions({
+      visible: false,
     });
   }
 
@@ -82,6 +92,20 @@ export class TargetChart {
       } else {
         this.markersPrimitive = createSeriesMarkers(this.areaSeries, markers);
       }
+      
+      // Add dummy data for 09:00 to 15:30 to stretch the time axis
+      const secondsInDay = 86400;
+      const startOfDay = Math.floor(firstPoint.time / secondsInDay) * secondsInDay;
+      const openTime = startOfDay + 9 * 3600; // 09:00
+      const closeTime = startOfDay + 15 * 3600 + 30 * 60; // 15:30
+      
+      const dummyData = [];
+      for (let t = openTime; t <= closeTime; t += 60) {
+        dummyData.push({ time: t, value: 0 });
+      }
+      // @ts-ignore
+      this.dummySeries.setData(dummyData);
+
       this.chart.timeScale().fitContent();
     }
   }

@@ -302,7 +302,7 @@ def run_morning_screener():
 # intraday_monitor (Intraday Monitoring)
 # =========================================================
 def fetch_bulk_prices(targets: list, cookie: str) -> dict:
-    codes = [t["code"] for t in targets if t["status"] == "OPEN"]
+    codes = [t["code"] for t in targets]
     if not codes: return {}
         
     data = urllib.parse.urlencode([("codes[]", c) for c in codes]).encode("utf-8")
@@ -348,7 +348,6 @@ def run_intraday_monitor(iteration_count: int):
     try:
         prices = fetch_bulk_prices(targets, cookie)
         for t in targets:
-            if t["status"] != "OPEN": continue
             code = t["code"]
             px = prices.get(code)
             if px is None: continue
@@ -363,20 +362,23 @@ def run_intraday_monitor(iteration_count: int):
                 t["history"].append({"time": current_ts, "value": px})
             
             updated = True
-            entry_px, target_px, stop_px = t["entry_price"], t["target"], t["stop"]
             
-            if px >= target_px:
-                t["status"] = "HIT_TP"
-                pnl = (px - entry_px) * t["shares"]
-                record_trade(code, t['name'], "SELL(TP)", t["shares"], px, pnl)
-                slack_post(f"[Take Profit Reached :tada:] {code} {t['name']}\nCurrent price {px:,.1f} JPY has reached the take profit target ({target_px:,.1f} JPY).\nEstimated Profit: +{pnl:,.0f} JPY")
-                print(f"{code} HIT TP! {px}")
-            elif px <= stop_px:
-                t["status"] = "HIT_SL"
-                pnl = (px - entry_px) * t["shares"]
-                record_trade(code, t['name'], "SELL(SL)", t["shares"], px, pnl)
-                slack_post(f"[Stop Loss Reached :warning:] {code} {t['name']}\nCurrent price {px:,.1f} JPY has reached the stop loss line ({stop_px:,.1f} JPY).\nEstimated Loss: {pnl:,.0f} JPY")
-                print(f"{code} HIT SL! {px}")
+            # Only trigger TP/SL if the position is currently OPEN
+            if t["status"] == "OPEN":
+                entry_px, target_px, stop_px = t["entry_price"], t["target"], t["stop"]
+                
+                if px >= target_px:
+                    t["status"] = "HIT_TP"
+                    pnl = (px - entry_px) * t["shares"]
+                    record_trade(code, t['name'], "SELL(TP)", t["shares"], px, pnl)
+                    slack_post(f"[Take Profit Reached :tada:] {code} {t['name']}\nCurrent price {px:,.1f} JPY has reached the take profit target ({target_px:,.1f} JPY).\nEstimated Profit: +{pnl:,.0f} JPY")
+                    print(f"{code} HIT TP! {px}")
+                elif px <= stop_px:
+                    t["status"] = "HIT_SL"
+                    pnl = (px - entry_px) * t["shares"]
+                    record_trade(code, t['name'], "SELL(SL)", t["shares"], px, pnl)
+                    slack_post(f"[Stop Loss Reached :warning:] {code} {t['name']}\nCurrent price {px:,.1f} JPY has reached the stop loss line ({stop_px:,.1f} JPY).\nEstimated Loss: {pnl:,.0f} JPY")
+                    print(f"{code} HIT SL! {px}")
                 
         if updated:
             with open(TARGETS_FILE, "w", encoding="utf-8") as f:
