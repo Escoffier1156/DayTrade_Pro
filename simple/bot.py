@@ -4,22 +4,413 @@
 J-Quantsデータ取得から、スクリーニング、日中の監視、そして大引け後のレポートまで、
 すべてを時間に応じて自律的に実行するデーモンスクリプト。
 """
-import time
 import datetime as _dt
+import gzip
+import html as _html
+import json
+import os
+import re
 import sys
+import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
-# simple フォルダの各モジュールをインポート
-import fetch_yesterday
-import morning_screener
-import intraday_monitor
-import daily_report
+# --- 定数・パス ---
+ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = ROOT / "data"
+SECRETS_FILE = ROOT / "config" / "secrets.env"
+UNIVERSE_FILE = DATA_DIR / "universe_latest.json"
+TARGETS_FILE = DATA_DIR / "today_targets.json"
+HISTORY_FILE = DATA_DIR / "trade_history.json"
 
+UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+
+# J-Quants
+API_BASE = "https://api.jquants.com/v2"
+BARS_DAILY = "/equities/bars/daily"
+CALENDAR = "/markets/calendar"
+MASTER = "/equities/master"
+AVG_WINDOW = 20
+
+# Kabutan Screener
+TARGET_URL = "https://kabutan.jp/warning/?mode=2_1&market=0&capitalization=-1&dispmode=normal&stc=&stm=0&page={page}"
+MAX_PAGES = 5
+MIN_AVG_VOLUME = 400_000
+MIN_AVG_TURNOVER = 3_000_000_000
+TP_PCT = 3.0
+SL_PCT = 2.0
+NIKKEI_STRONG = 0.5
+NIKKEI_WEAK = -0.5
+TOTAL_CAPITAL = 10_000_000
+LOT = 100
+
+_TABLE = re.compile(r'<table class="stock_table[^"]*">(.*?)</table>', re.S)
+_TR = re.compile(r"<tr[^>]*>(.*?)</tr>", re.S)
+_CELL = re.compile(r"<t[hd][^>]*>(.*?)</t[hd]>", re.S)
+
+# --- 共通ユーティリティ ---
+def load_env(name: str) -> str:
+    v = os.environ.get(name)
+    if v:
+        return v
+    if SECRETS_FILE.exists():
+        for line in SECRETS_FILE.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith(f"{name}=") and not line.startswith("#"):
+                return line.split("=", 1)[1].strip()
+    return ""
+
+def slack_post(text: str):
+    token = load_env("SLACK_BOT_TOKEN")
+    channel = load_env("SLACK_CHANNEL_ALERTS")
+    if not token or not channel:
+        print("Slack Token/Channelが設定されていません。標準出力のみ行います。")
+        print(text)
+        return
+        
+    data = json.dumps({"channel": channel, "text": text}, ensure_ascii=False).encode()
+    req = urllib.request.Request(
+        "https://slack.com/api/chat.postMessage", data=data,
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=utf-8"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            pass
+    except Exception as e:
+        print(f"Slack post error: {e}")
+
+# =========================================================
+# fetch_yesterday (J-Quants ユニバース作成)
+# =========================================================
+def api_get(path: str, params: dict, key: str) -> list[dict]:
+    rows = []
+    page = None
+    while True:
+        q = dict(params)
+        if page:
+            q["pagination_key"] = page
+        url = f"{API_BASE}{path}?" + urllib.parse.urlencode(q)
+        req = urllib.request.Request(url, headers={"x-api-key": key})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                doc = json.loads(r.read())
+        except Exception as exc:
+            raise RuntimeError(f"{path} 取得失敗: {exc}") from exc
+        rows.extend(doc.get("data") or [])
+        page = doc.get("pagination_key")
+        time.sleep(0.3)
+        if not page:
+            return rows
+
+def trading_days(key: str, end: _dt.date, count: int) -> list[_dt.date]:
+    start = end - _dt.timedelta(days=count * 3)
+    rows = api_get(CALENDAR, {"from": start.isoformat(), "to": end.isoformat()}, key)
+    days = sorted(
+        _dt.date.fromisoformat(r["Date"])
+        for r in rows
+        if str(r.get("HolDiv")) in {"1", "2"}
+        and _dt.date.fromisoformat(r["Date"]) <= end
+    )
+    if not days:
+        raise RuntimeError(f"{start}〜{end} に営業日がありません")
+    return days[-count:]
+
+def fetch_master(key: str, date: _dt.date) -> dict:
+    rows = api_get(MASTER, {"date": date.isoformat()}, key)
+    return {r["Code"]: r for r in rows}
+
+def run_fetch_yesterday():
+    key = load_env("JQUANTS_API_KEY")
+    today = _dt.date.today()
+    days = trading_days(key, today, AVG_WINDOW + 5)
+    
+    target_day = next((d for d in reversed(days) if d < today), None)
+    if not target_day:
+        print("有効な過去の営業日が見つかりません。")
+        return
+
+    target_days = [d for d in days if d <= target_day][-AVG_WINDOW:]
+    print(f"J-Quants APIから過去 {AVG_WINDOW} 営業日分のデータを取得中...")
+    
+    by_symbol = {}
+    for d in target_days:
+        rows = api_get(BARS_DAILY, {"date": d.isoformat()}, key)
+        for r in rows:
+            by_symbol.setdefault(r["Code"], []).append(r)
+        print(f"  {d}: {len(rows)} 銘柄取得")
+        
+    master = fetch_master(key, target_days[-1])
+    universe = {}
+    for code, bars in by_symbol.items():
+        if len(bars) < AVG_WINDOW // 2:
+            continue
+        m = master.get(code)
+        if not m or str(m.get("Mkt")) != "0111": # 東証プライムのみ
+            continue
+            
+        valid_bars = [b for b in bars if b.get("Vo") is not None and b.get("Va") is not None]
+        if valid_bars:
+            avg_vo = sum(float(b["Vo"]) for b in valid_bars) / len(valid_bars)
+            avg_va = sum(float(b["Va"]) for b in valid_bars) / len(valid_bars)
+            c4 = code[:-1] if code.endswith("0") and len(code) == 5 else code
+            universe[c4] = {
+                "code": c4,
+                "name": m.get("CoName", ""),
+                "sector": m.get("S33Nm", ""),
+                "avg_volume": avg_vo,
+                "avg_turnover": avg_va,
+                "latest_close": float(bars[-1].get("C", 0))
+            }
+            
+    print(f"母集団作成完了: {len(universe)} 銘柄")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with open(UNIVERSE_FILE, "w", encoding="utf-8") as f:
+        json.dump(universe, f, ensure_ascii=False, indent=2)
+
+# =========================================================
+# morning_screener (株探スクレイピング)
+# =========================================================
+def _text(s: str) -> str:
+    return _html.unescape(re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", s))).strip()
+
+def _num(s: str) -> float | None:
+    s = s.replace(",", "").replace("＋", "+").replace("−", "-").strip()
+    if not s or s in {"-", "－", "—"}: return None
+    try: return float(s)
+    except ValueError: return None
+
+def fetch_page(url: str, cookie: str) -> str:
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Cookie": cookie, "Accept-Encoding": "gzip"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        raw = r.read()
+        if r.headers.get("Content-Encoding") == "gzip":
+            raw = gzip.decompress(raw)
+        return raw.decode("utf-8", "replace")
+
+def parse_nikkei(doc: str) -> dict:
+    m = re.search(r'<table id="header_shisuu_big">(.*?)</table>', doc, re.S)
+    if not m: return {}
+    nums = [c for c in [_text(c) for c in _CELL.findall(m.group(1))] if c and _num(c) is not None]
+    if len(nums) >= 2:
+        val, chg = _num(nums[0]), _num(nums[1])
+        if val and chg:
+            return {"value": val, "change": chg, "pct": chg / (val - chg) * 100}
+    return {}
+
+def parse_ranking(doc: str) -> list[dict]:
+    m = _TABLE.search(doc)
+    if not m: return []
+    trs = _TR.findall(m.group(1))
+    if not trs: return []
+    
+    rows = []
+    for tr in trs[1:]:
+        c = [_text(x) for x in _CELL.findall(tr)]
+        if len(c) < 4: continue
+        pi = next((i for i, x in enumerate(c) if x.endswith("%")), None)
+        if pi is None or pi < 3: continue
+            
+        pct = _num(c[pi].rstrip(" %"))
+        price = next((_num(c[j]) for j in range(pi - 2, 2, -1) if _num(c[j]) is not None), None)
+        if price is not None:
+            rows.append({"code": c[0], "name": c[1], "price": price, "change_pct": pct})
+    return rows
+
+def run_morning_screener():
+    cookie = load_env("KABUTAN_COOKIE")
+    if not UNIVERSE_FILE.exists():
+        print(f"エラー: {UNIVERSE_FILE} が見つかりません。")
+        return
+        
+    universe = json.loads(UNIVERSE_FILE.read_text(encoding="utf-8"))
+    print("株探から本日の活況銘柄をスクレイピング中...")
+    all_rows = []
+    nikkei = {}
+    for page in range(1, MAX_PAGES + 1):
+        try:
+            doc = fetch_page(TARGET_URL.format(page=page), cookie)
+            if page == 1: nikkei = parse_nikkei(doc)
+            page_rows = parse_ranking(doc)
+            all_rows.extend(page_rows)
+        except Exception as e:
+            print(f"  Page {page} 取得失敗: {e}")
+            break
+            
+    n_pct = nikkei.get("pct", 0)
+    if n_pct >= NIKKEI_STRONG: pick_count, regime = 5, "強気"
+    elif n_pct <= NIKKEI_WEAK: pick_count, regime = 3, "弱気"
+    else: pick_count, regime = 4, "中立"
+        
+    print(f"\n日経平均: {n_pct:+.2f}% ({regime}) -> {pick_count} 銘柄ピックアップします")
+    
+    filtered = []
+    for r in all_rows:
+        u = universe.get(r["code"])
+        if u and u["avg_volume"] >= MIN_AVG_VOLUME and u["avg_turnover"] >= MIN_AVG_TURNOVER:
+            r.update({"avg_volume": u["avg_volume"], "avg_turnover": u["avg_turnover"], "sector": u["sector"]})
+            filtered.append(r)
+            
+    filtered.sort(key=lambda x: -(x["change_pct"] or -99))
+    targets = []
+    lines = [
+        f"【買い付け推奨】地合い: {regime} (日経 {n_pct:+.2f}%) -> {pick_count}銘柄厳選",
+        f"条件: 出来高{MIN_AVG_VOLUME//10000}万株以上, 売買代金{MIN_AVG_TURNOVER//100000000}億円以上\n"
+    ]
+    
+    for i, r in enumerate(filtered[:pick_count], 1):
+        px = r["price"]
+        shares = int((TOTAL_CAPITAL / pick_count) // px // LOT) * LOT
+        if shares == 0: continue
+            
+        stop_px = px * (1 - SL_PCT / 100)
+        target_px = px * (1 + TP_PCT / 100)
+        
+        targets.append({
+            "code": r["code"], "name": r["name"], "sector": r["sector"],
+            "entry_price": px, "shares": shares, "stop": stop_px, "target": target_px,
+            "status": "OPEN", "latest_price": px
+        })
+        lines.append(f"{i}. {r['code']} {r['name']} ({r['sector']})\n   現在値: {px:,.1f}円 ({r['change_pct']:+.2f}%)\n   数量: {shares:,}株 (約 {px * shares / 10000:,.0f}万円)\n   利確目安(+{TP_PCT}%): {target_px:,.1f}円\n   損切目安({-SL_PCT}%): {stop_px:,.1f}円\n")
+        
+    if not targets: lines.append("※ 本日の条件に合致する銘柄はありませんでした。")
+    text = "\n".join(lines)
+    
+    with open(TARGETS_FILE, "w", encoding="utf-8") as f:
+        json.dump({"date": _dt.date.today().isoformat(), "targets": targets}, f, ensure_ascii=False, indent=2)
+    slack_post(text)
+    print("スクリーニング完了。")
+
+# =========================================================
+# intraday_monitor (ザラ場監視)
+# =========================================================
+def fetch_bulk_prices(targets: list, cookie: str) -> dict:
+    codes = [t["code"] for t in targets if t["status"] == "OPEN"]
+    if not codes: return {}
+        
+    data = urllib.parse.urlencode([("codes[]", c) for c in codes]).encode("utf-8")
+    req = urllib.request.Request("https://kabutan.jp/favorite/stock/", data=data,
+        headers={"User-Agent": UA, "Cookie": cookie, "Accept-Encoding": "gzip", "Content-Type": "application/x-www-form-urlencoded"})
+    
+    prices = {}
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            raw = gzip.decompress(r.read()) if r.headers.get("Content-Encoding") == "gzip" else r.read()
+            res_json = json.loads(raw.decode("utf-8", "replace"))
+            for row in (res_json if isinstance(res_json, list) else res_json.get("data", [])):
+                if len(row) >= 2:
+                    code, px_str = str(row[0]), str(row[1]).replace(",", "")
+                    if px_str and px_str not in ["－", "-"]:
+                        try: prices[code] = float(px_str)
+                        except ValueError: pass
+    except Exception as e:
+        print(f"API Bulk Fetch Error: {e}")
+    return prices
+
+def record_trade(code: str, name: str, side: str, qty: int, price: float, pnl: float):
+    trade = {"time": _dt.datetime.now().strftime("%H:%M:%S"), "ticker": code, "name": name, "side": side, "qty": qty, "price": price, "pnl": pnl}
+    history = []
+    if HISTORY_FILE.exists():
+        try: history = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+        except json.JSONDecodeError: pass
+    history.append(trade)
+    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+
+def run_intraday_monitor(iteration_count: int):
+    if not TARGETS_FILE.exists(): return
+    try: data = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
+    except: return
+        
+    if data.get("date") != _dt.date.today().isoformat(): return
+        
+    cookie = load_env("KABUTAN_COOKIE")
+    targets = data.get("targets", [])
+    updated = False
+    
+    try:
+        prices = fetch_bulk_prices(targets, cookie)
+        for t in targets:
+            if t["status"] != "OPEN": continue
+            code = t["code"]
+            px = prices.get(code)
+            if px is None: continue
+                
+            t["latest_price"] = px
+            is_history_poll = (iteration_count % 4 == 0)
+            if is_history_poll:
+                t.setdefault("history", [])
+                current_ts = int(time.time())
+                if t["history"] and t["history"][-1]["time"] >= current_ts:
+                    current_ts = t["history"][-1]["time"] + 1
+                t["history"].append({"time": current_ts, "value": px})
+            
+            updated = True
+            entry_px, target_px, stop_px = t["entry_price"], t["target"], t["stop"]
+            
+            if px >= target_px:
+                t["status"] = "HIT_TP"
+                pnl = (px - entry_px) * t["shares"]
+                record_trade(code, t['name'], "SELL(TP)", t["shares"], px, pnl)
+                slack_post(f"【利確到達 :tada:】 {code} {t['name']}\n現在値 {px:,.1f}円 が利確目標 ({target_px:,.1f}円) に到達しました。\n想定利益: +{pnl:,.0f}円")
+                print(f"{code} HIT TP! {px}")
+            elif px <= stop_px:
+                t["status"] = "HIT_SL"
+                pnl = (px - entry_px) * t["shares"]
+                record_trade(code, t['name'], "SELL(SL)", t["shares"], px, pnl)
+                slack_post(f"【損切到達 :warning:】 {code} {t['name']}\n現在値 {px:,.1f}円 が損切ライン ({stop_px:,.1f}円) に到達しました。\n想定損失: {pnl:,.0f}円")
+                print(f"{code} HIT SL! {px}")
+                
+        if updated:
+            with open(TARGETS_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+                
+    except Exception as e:
+        print(f"Monitor step error: {e}")
+
+# =========================================================
+# daily_report (日次レポート)
+# =========================================================
+def run_daily_report():
+    if not TARGETS_FILE.exists(): return
+    try: data = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
+    except: return
+        
+    target_date = data.get("date")
+    targets = data.get("targets", [])
+    total_pnl = 0
+    lines = [f"【本日の運用結果レポート】 ({target_date})", "---"]
+    
+    if not targets:
+        lines.append("本日の取引対象銘柄はありませんでした。")
+    else:
+        for i, t in enumerate(targets, 1):
+            code, name, status, entry, shares = t["code"], t["name"], t["status"], t["entry_price"], t["shares"]
+            latest = t.get("latest_price", entry)
+            exit_px = latest
+            
+            if status == "HIT_TP": result = "🟢 利確"
+            elif status == "HIT_SL": result = "🔴 損切"
+            else: result = "⚪ 未決済（大引）"
+                
+            pnl = (exit_px - entry) * shares
+            total_pnl += pnl
+            lines.extend([f"{i}. {code} {name} - {result}", f"   買値: {entry:,.1f}円 -> 決済値: {exit_px:,.1f}円", f"   数量: {shares:,}株", f"   損益: {pnl:+,.0f}円", ""])
+            
+        lines.append("---")
+        lines.append(f"💰 本日の合計損益: {total_pnl:+,.0f}円")
+        
+    text = "\n".join(lines)
+    slack_post(text)
+    print("日次レポート送信完了。")
+
+# =========================================================
+# Main Loop (Scheduler)
+# =========================================================
 def main():
     print("=== DayTrade Pro Master Bot Started ===")
     print("Bot is now running continuously and waiting for scheduled tasks...")
     
-    # 状態管理フラグ（同じ日に複数回実行しないため）
     last_run_fetch = None
     last_run_screener = None
     last_run_report = None
@@ -31,56 +422,43 @@ def main():
         try:
             now = _dt.datetime.now()
             today_str = now.date().isoformat()
+            time_hm = now.hour * 100 + now.minute
             
-            # --- 23:00 : fetch_yesterday.py ---
+            # --- 23:00 : fetch_yesterday (J-Quants ユニバース作成) ---
             if now.hour == 23 and now.minute >= 0 and last_run_fetch != today_str:
-                print(f"[{now.strftime('%H:%M:%S')}] 実行: fetch_yesterday.main()")
-                try:
-                    fetch_yesterday.main()
-                except Exception as e:
-                    print(f"fetch_yesterday エラー: {e}")
+                print(f"[{now.strftime('%H:%M:%S')}] 実行: run_fetch_yesterday()")
+                try: run_fetch_yesterday()
+                except Exception as e: print(f"fetch_yesterday エラー: {e}")
                 last_run_fetch = today_str
                 
-            # --- 09:10 : morning_screener.py ---
+            # --- 09:10 : morning_screener (株探スクリーニング) ---
             if now.hour == 9 and now.minute >= 10 and now.minute < 30 and last_run_screener != today_str:
-                print(f"[{now.strftime('%H:%M:%S')}] 実行: morning_screener.main()")
-                try:
-                    morning_screener.main()
-                except Exception as e:
-                    print(f"morning_screener エラー: {e}")
+                print(f"[{now.strftime('%H:%M:%S')}] 実行: run_morning_screener()")
+                try: run_morning_screener()
+                except Exception as e: print(f"morning_screener エラー: {e}")
                 last_run_screener = today_str
                 
-            # --- 08:55 ~ 11:30, 12:30 ~ 15:30 : intraday_monitor ---
-            time_hm = now.hour * 100 + now.minute
+            # --- 08:55 ~ 11:30, 12:30 ~ 15:30 : intraday_monitor (ザラ場監視) ---
             if (855 <= time_hm < 1130) or (1230 <= time_hm <= 1530):
                 if not is_monitoring:
                     print(f"[{now.strftime('%H:%M:%S')}] --- 監視モード開始 ---")
-                    is_monitoring = True
-                    iteration_count = 0
-                
-                # 監視ステップを1回実行
-                intraday_monitor.monitor_step(iteration_count)
+                    is_monitoring, iteration_count = True, 0
+                run_intraday_monitor(iteration_count)
                 iteration_count += 1
-                
-                # 次の監視まで15秒待機
-                # (API負荷軽減のため確実にスリープ)
                 time.sleep(15)
-                continue  # 1秒ごとのループではなく、監視中は15秒ペースで回す
+                continue
             else:
                 if is_monitoring:
                     print(f"[{now.strftime('%H:%M:%S')}] --- 監視モード終了 ---")
                     is_monitoring = False
             
-            # --- 15:40 : daily_report.py ---
+            # --- 15:40 : daily_report (日次レポート) ---
             if now.hour == 15 and now.minute >= 40 and last_run_report != today_str:
-                print(f"[{now.strftime('%H:%M:%S')}] 実行: daily_report.main()")
-                try:
-                    daily_report.main()
-                except Exception as e:
-                    print(f"daily_report エラー: {e}")
+                print(f"[{now.strftime('%H:%M:%S')}] 実行: run_daily_report()")
+                try: run_daily_report()
+                except Exception as e: print(f"daily_report エラー: {e}")
                 last_run_report = today_str
                 
-            # 監視時間外は1秒ごとにチェック（CPU負荷ゼロ）
             time.sleep(1)
             
         except KeyboardInterrupt:
