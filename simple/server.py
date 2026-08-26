@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-超シンプルなWebサーバー
-web/dist/ にあるビルド済みのフロントエンドを静的配信しつつ、
-/api/targets というAPIエンドポイントで data/today_targets.json の内容を返す。
+Super simple web server.
+Serves the built frontend statically from web/dist/,
+and exposes the /api/targets endpoint to return the contents of data/today_targets.json.
 """
 import http.server
 import socketserver
@@ -33,7 +33,7 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-cache")
-            # CORS許可 (開発用)
+            # Allow CORS (for development)
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             
@@ -55,7 +55,7 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-cache")
-            # CORS許可 (開発用)
+            # Allow CORS (for development)
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             
@@ -68,7 +68,7 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
             return
         
-        # それ以外は web/dist/ 以下の静的ファイルを返す
+        # Otherwise, serve static files under web/dist/
         super().do_GET()
 
 class ReusableTCPServer(socketserver.TCPServer):
@@ -76,7 +76,7 @@ class ReusableTCPServer(socketserver.TCPServer):
 
 def main():
     if not DIST_DIR.exists():
-        print(f"警告: {DIST_DIR} が存在しません。先に npm run build を実行してください。")
+        print(f"Warning: {DIST_DIR} does not exist. Please run 'npm run build' first.")
         
     with ReusableTCPServer(("", PORT), SimpleAPIHandler) as httpd:
         print(f"DayTrade Pro Dashboard Server started at http://localhost:{PORT}")
