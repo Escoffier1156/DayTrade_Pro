@@ -431,8 +431,8 @@ def main():
                 except Exception as e: print(f"fetch_yesterday Error: {e}")
                 last_run_fetch = today_str
                 
-            # --- 09:10 : morning_screener (Kabutan Screening) ---
-            if now.hour == 9 and now.minute >= 10 and now.minute < 30 and last_run_screener != today_str:
+            # --- 09:05 : morning_screener (Kabutan Screening) ---
+            if now.hour == 9 and now.minute >= 5 and now.minute < 30 and last_run_screener != today_str:
                 print(f"[{now.strftime('%H:%M:%S')}] Executing: run_morning_screener()")
                 try: run_morning_screener()
                 except Exception as e: print(f"morning_screener Error: {e}")
