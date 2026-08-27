@@ -35,7 +35,7 @@ MASTER = "/equities/master"
 AVG_WINDOW = 20
 
 # Kabutan Screener
-TARGET_URL = "https://kabutan.jp/warning/?mode=2_1&market=0&capitalization=-1&dispmode=normal&stc=&stm=0&page={page}"
+TARGET_URL = "https://kabutan.jp/warning/?mode=2_1&market=0&capitalization=3&dispmode=normal&stc=&stm=0&page={page}"
 MAX_PAGES = 5
 MIN_AVG_VOLUME = 400_000
 MIN_AVG_TURNOVER = 3_000_000_000
