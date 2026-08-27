@@ -39,7 +39,7 @@ TARGET_URL = "https://kabutan.jp/warning/?mode=2_1&market=0&capitalization=-1&di
 MAX_PAGES = 5
 MIN_AVG_VOLUME = 400_000
 MIN_AVG_TURNOVER = 3_000_000_000
-TP_PCT = 3.0
+TP_PCT = 2.5
 SL_PCT = 2.0
 NIKKEI_STRONG = 0.5
 NIKKEI_WEAK = -0.5
