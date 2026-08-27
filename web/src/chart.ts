@@ -117,7 +117,6 @@ export class TargetChart {
       lineWidth: 1,
       lineStyle: LineStyle.Dashed,
       axisLabelVisible: true,
-      title: 'TP',
     });
 
     this.areaSeries.createPriceLine({
@@ -126,7 +125,6 @@ export class TargetChart {
       lineWidth: 1,
       lineStyle: LineStyle.Dashed,
       axisLabelVisible: true,
-      title: 'SL',
     });
     
     this.areaSeries.createPriceLine({
@@ -135,7 +133,6 @@ export class TargetChart {
       lineWidth: 1,
       lineStyle: LineStyle.Dotted,
       axisLabelVisible: true,
-      title: 'Entry',
     });
   }
 
