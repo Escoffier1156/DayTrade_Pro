@@ -70,7 +70,6 @@ export class TargetChart {
         position: 'belowBar',
         color: '#3b82f6',
         shape: 'circle',
-        text: `Buy @ ¥${target.entry_price}`
       });
       
       // Exit Marker (if closed)
@@ -82,7 +81,6 @@ export class TargetChart {
           position: 'aboveBar',
           color: isWin ? '#10b981' : '#ef4444',
           shape: 'circle',
-          text: `${isWin ? 'TP' : 'SL'} @ ¥${lastPoint.value}`
         });
       }
       
