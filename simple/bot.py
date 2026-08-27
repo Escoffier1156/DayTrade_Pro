@@ -271,8 +271,8 @@ def run_morning_screener():
     filtered.sort(key=lambda x: -(x["change_pct"] or -99))
     targets = []
     lines = [
-        f"[Buy Recommendation] Market condition: {regime} (Nikkei {n_pct:+.2f}%) -> {pick_count} strictly selected symbols",
-        f"Conditions: Volume >= {MIN_AVG_VOLUME//10000}M shares, Turnover >= {MIN_AVG_TURNOVER//100000000}B JPY\n"
+        f"【買い付け推奨】地合い: {regime} (日経 {n_pct:+.2f}%) -> {pick_count}銘柄厳選",
+        f"条件: 出来高{MIN_AVG_VOLUME//10000}万株以上, 売買代金{MIN_AVG_TURNOVER//100000000}億円以上\n"
     ]
     
     for i, r in enumerate(filtered[:pick_count], 1):
@@ -288,9 +288,9 @@ def run_morning_screener():
             "entry_price": px, "shares": shares, "stop": stop_px, "target": target_px,
             "status": "OPEN", "latest_price": px
         })
-        lines.append(f"{i}. {r['code']} {r['name']} ({r['sector']})\n   Current Price: {px:,.1f} JPY ({r['change_pct']:+.2f}%)\n   Quantity: {shares:,} shares (approx. {px * shares / 10000:,.0f}M JPY)\n   Take Profit Target (+{TP_PCT}%): {target_px:,.1f} JPY\n   Stop Loss Target ({-SL_PCT}%): {stop_px:,.1f} JPY\n")
+        lines.append(f"{i}. {r['code']} {r['name']} ({r['sector']})\n   現在値: {px:,.1f}円 ({r['change_pct']:+.2f}%)\n   数量: {shares:,}株 (約 {px * shares / 10000:,.0f}万円)\n   利確目安(+{TP_PCT}%): {target_px:,.1f}円\n   損切目安({-SL_PCT}%): {stop_px:,.1f}円\n")
         
-    if not targets: lines.append("* No symbols matched today's conditions.")
+    if not targets: lines.append("* 本日の条件に合致する銘柄はありませんでした。")
     text = "\n".join(lines)
     
     with open(TARGETS_FILE, "w", encoding="utf-8") as f:
@@ -371,7 +371,7 @@ def run_intraday_monitor(iteration_count: int):
                     t["status"] = "HIT_TP"
                     pnl = (px - entry_px) * t["shares"]
                     record_trade(code, t['name'], "SELL(TP)", t["shares"], px, pnl)
-                    slack_post(f"[Take Profit Reached :tada:] {code} {t['name']}\nCurrent price {px:,.1f} JPY has reached the take profit target ({target_px:,.1f} JPY).\nEstimated Profit: +{pnl:,.0f} JPY")
+                    slack_post(f"[利確到達 :tada:] {code} {t['name']}\n現在値 {px:,.1f} 円が利確目標 ({target_px:,.1f} 円) に到達しました。\n見込利益: +{pnl:,.0f} 円")
                     print(f"{code} HIT TP! {px}")
                 elif px <= stop_px:
                     now_time = _dt.datetime.now()
@@ -379,14 +379,14 @@ def run_intraday_monitor(iteration_count: int):
                     
                     if time_hm < 945:
                         if not t.get("sl_warned"):
-                            slack_post(f"[SL Warning :warning:] {code} {t['name']}\nCurrent price {px:,.1f} JPY is below the stop loss line ({stop_px:,.1f} JPY).\nHolding position until 09:45 to observe the situation.")
+                            slack_post(f"[損切警告 :warning:] {code} {t['name']}\n現在値 {px:,.1f} 円が損切ライン ({stop_px:,.1f} 円) を下回りました。\n09:45まで様子見を継続します。")
                             t["sl_warned"] = True
                             print(f"{code} SL Warning triggered before 9:45.")
                     else:
                         t["status"] = "HIT_SL"
                         pnl = (px - entry_px) * t["shares"]
                         record_trade(code, t['name'], "SELL(SL)", t["shares"], px, pnl)
-                        slack_post(f"[Stop Loss Executed :rotating_light:] {code} {t['name']}\nCurrent price {px:,.1f} JPY has reached the stop loss line ({stop_px:,.1f} JPY).\nEstimated Loss: {pnl:,.0f} JPY")
+                        slack_post(f"[損切確定 :rotating_light:] {code} {t['name']}\n現在値 {px:,.1f} 円が損切ライン ({stop_px:,.1f} 円) に到達しました。\n見込損失: {pnl:,.0f} 円")
                         print(f"{code} HIT SL! {px}")
                 
         if updated:
@@ -407,26 +407,26 @@ def run_daily_report():
     target_date = data.get("date")
     targets = data.get("targets", [])
     total_pnl = 0
-    lines = [f"[Today's Trading Results Report] ({target_date})", "---"]
+    lines = [f"【本日の運用成績レポート】 ({target_date})", "---"]
     
     if not targets:
-        lines.append("No trading target symbols today.")
+        lines.append("本日の取引対象銘柄はありませんでした。")
     else:
         for i, t in enumerate(targets, 1):
             code, name, status, entry, shares = t["code"], t["name"], t["status"], t["entry_price"], t["shares"]
             latest = t.get("latest_price", entry)
             exit_px = latest
             
-            if status == "HIT_TP": result = "🟢 Take Profit"
-            elif status == "HIT_SL": result = "🔴 Stop Loss"
-            else: result = "⚪ Unsettled (Market Close)"
+            if status == "HIT_TP": result = "🟢 利確"
+            elif status == "HIT_SL": result = "🔴 損切"
+            else: result = "⚪ 未決済 (大引け)"
                 
             pnl = (exit_px - entry) * shares
             total_pnl += pnl
-            lines.extend([f"{i}. {code} {name} - {result}", f"   Entry: {entry:,.1f} JPY -> Exit: {exit_px:,.1f} JPY", f"   Quantity: {shares:,} shares", f"   P&L: {pnl:+,.0f} JPY", ""])
+            lines.extend([f"{i}. {code} {name} - {result}", f"   エントリー: {entry:,.1f}円 -> 決済/現在値: {exit_px:,.1f}円", f"   数量: {shares:,}株", f"   損益: {pnl:+,.0f}円", ""])
             
         lines.append("---")
-        lines.append(f"💰 Today's Total P&L: {total_pnl:+,.0f} JPY")
+        lines.append(f"💰 本日の合計損益: {total_pnl:+,.0f}円")
         
     text = "\n".join(lines)
     slack_post(text)
