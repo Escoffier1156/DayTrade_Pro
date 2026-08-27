@@ -264,9 +264,12 @@ def run_morning_screener():
     filtered = []
     for r in all_rows:
         u = universe.get(r["code"])
-        if u and u["avg_volume"] >= MIN_AVG_VOLUME and u["avg_turnover"] >= MIN_AVG_TURNOVER:
-            r.update({"avg_volume": u["avg_volume"], "avg_turnover": u["avg_turnover"], "sector": u["sector"]})
-            filtered.append(r)
+        # 硬い銘柄: Turnover >= 5 billion, Price >= 500, +1% <= change_pct <= +4%
+        if u and u["avg_volume"] >= MIN_AVG_VOLUME and u["avg_turnover"] >= 5000000000 and r.get("price", 0) >= 500:
+            cp = r.get("change_pct", 0)
+            if cp is not None and 1.0 <= cp <= 4.0:
+                r.update({"avg_volume": u["avg_volume"], "avg_turnover": u["avg_turnover"], "sector": u["sector"]})
+                filtered.append(r)
             
     filtered.sort(key=lambda x: -(x["change_pct"] or -99))
     targets = []
@@ -455,8 +458,8 @@ def main():
                 except Exception as e: print(f"fetch_yesterday Error: {e}")
                 set_last_run("fetch", today_str)
                 
-            # --- 09:05 : morning_screener (Kabutan Screening) ---
-            if now.hour == 9 and now.minute >= 5 and now.minute < 30 and get_last_run("screener") != today_str:
+            # --- 09:10 : morning_screener (Kabutan Screening) ---
+            if now.hour == 9 and now.minute >= 10 and now.minute < 30 and get_last_run("screener") != today_str:
                 print(f"[{now.strftime('%H:%M:%S')}] Executing: run_morning_screener()")
                 try: run_morning_screener()
                 except Exception as e: print(f"morning_screener Error: {e}")
