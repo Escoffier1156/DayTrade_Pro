@@ -373,6 +373,21 @@ def run_intraday_monitor(iteration_count: int):
                     record_trade(code, t['name'], "SELL(TP)", t["shares"], px, pnl)
                     slack_post(f"[Take Profit Reached :tada:] {code} {t['name']}\nCurrent price {px:,.1f} JPY has reached the take profit target ({target_px:,.1f} JPY).\nEstimated Profit: +{pnl:,.0f} JPY")
                     print(f"{code} HIT TP! {px}")
+                elif px <= stop_px:
+                    now_time = _dt.datetime.now()
+                    time_hm = now_time.hour * 100 + now_time.minute
+                    
+                    if time_hm < 945:
+                        if not t.get("sl_warned"):
+                            slack_post(f"[SL Warning :warning:] {code} {t['name']}\nCurrent price {px:,.1f} JPY is below the stop loss line ({stop_px:,.1f} JPY).\nHolding position until 09:45 to observe the situation.")
+                            t["sl_warned"] = True
+                            print(f"{code} SL Warning triggered before 9:45.")
+                    else:
+                        t["status"] = "HIT_SL"
+                        pnl = (px - entry_px) * t["shares"]
+                        record_trade(code, t['name'], "SELL(SL)", t["shares"], px, pnl)
+                        slack_post(f"[Stop Loss Executed :rotating_light:] {code} {t['name']}\nCurrent price {px:,.1f} JPY has reached the stop loss line ({stop_px:,.1f} JPY).\nEstimated Loss: {pnl:,.0f} JPY")
+                        print(f"{code} HIT SL! {px}")
                 
         if updated:
             with open(TARGETS_FILE, "w", encoding="utf-8") as f:
