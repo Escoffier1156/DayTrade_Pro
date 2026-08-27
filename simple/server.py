@@ -68,7 +68,20 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
             return
         
-        # Otherwise, serve static files under web/dist/
+        # Serve static files under web/dist/ but add no-cache headers for html
+        path = self.translate_path(self.path)
+        if path.endswith(".html") or self.path == "/":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+            self.end_headers()
+            index_path = DIST_DIR / "index.html"
+            if index_path.exists():
+                self.wfile.write(index_path.read_bytes())
+            return
+            
         super().do_GET()
 
     def do_POST(self):
