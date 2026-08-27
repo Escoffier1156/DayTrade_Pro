@@ -325,7 +325,7 @@ def fetch_bulk_prices(targets: list, cookie: str) -> dict:
     return prices
 
 def record_trade(code: str, name: str, side: str, qty: int, price: float, pnl: float):
-    trade = {"time": _dt.datetime.now().strftime("%H:%M:%S"), "ticker": code, "name": name, "side": side, "qty": qty, "price": price, "pnl": pnl}
+    trade = {"date": _dt.date.today().isoformat(), "time": _dt.datetime.now().strftime("%H:%M:%S"), "ticker": code, "name": name, "side": side, "qty": qty, "price": price, "pnl": pnl}
     history = []
     if HISTORY_FILE.exists():
         try: history = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))

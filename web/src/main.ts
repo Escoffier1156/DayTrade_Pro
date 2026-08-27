@@ -139,36 +139,95 @@ function updateMainChart() {
 
 function renderHistory() {
   logBody.innerHTML = '';
-  // historyData is already expected to be chronologically appended. Reverse to show newest on top.
-  const reversed = [...historyData].reverse();
-  
-  let winCount = 0;
-  let totalPnl = 0;
-
-  reversed.forEach(log => {
-    const isWin = log.pnl >= 0;
-    const colorClass = isWin ? 'text-green' : 'text-red';
-    const sign = isWin ? '+' : '';
-    if (isWin) winCount++;
-    totalPnl += log.pnl;
-
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${log.time}</td>
-      <td class="text-amber">${log.ticker}</td>
-      <td>${log.side}</td>
-      <td>${formatYen(log.qty)}</td>
-      <td>${formatYen(log.price)}</td>
-      <td class="${colorClass}">${sign}${formatYen(log.pnl)}</td>
-    `;
-    logBody.appendChild(tr);
+  // Sort reverse chronologically by date and time
+  const sorted = [...historyData].sort((a, b) => {
+    const dateA = a.date || '';
+    const dateB = b.date || '';
+    if (dateA !== dateB) return dateA > dateB ? -1 : 1;
+    return a.time > b.time ? -1 : 1;
   });
 
-  const pnlColor = totalPnl >= 0 ? 'text-green' : 'text-red';
-  const pnlSign = totalPnl >= 0 ? '+' : '';
-  const rlzPct = ((totalPnl / 10000000) * 100).toFixed(2);
+  // Group by date
+  const grouped: Record<string, TradeLog[]> = {};
+  sorted.forEach(log => {
+    const d = log.date || 'Unknown';
+    if (!grouped[d]) grouped[d] = [];
+    grouped[d].push(log);
+  });
+
+  const todayStr = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD in local time
+  let todayTotalPnl = 0;
   
-  headerRlz.innerHTML = `RLZ <span class="${pnlColor}">${pnlSign}&yen;${formatYen(totalPnl)} (${pnlSign}${rlzPct}%)</span>`;
+  if (grouped[todayStr]) {
+    todayTotalPnl = grouped[todayStr].reduce((sum, log) => sum + log.pnl, 0);
+  }
+
+  for (const [date, logs] of Object.entries(grouped)) {
+    let datePnl = 0;
+    logs.forEach(l => datePnl += l.pnl);
+    
+    // Create header row
+    const headerTr = document.createElement('tr');
+    headerTr.className = 'date-group-header';
+    const pnlColor = datePnl >= 0 ? 'text-green' : 'text-red';
+    const pnlSign = datePnl >= 0 ? '+' : '';
+    
+    const isToday = date === todayStr;
+    const isExpanded = isToday; // Today starts expanded, others collapsed
+    
+    headerTr.innerHTML = `
+      <td colspan="5" style="text-align: left; cursor: pointer; padding-left: 8px;">
+        <span class="accordion-icon" style="display: inline-block; width: 12px;">${isExpanded ? '▼' : '▶'}</span> 
+        <span style="font-weight: bold; color: #cbd5e1;">${date}</span>
+      </td>
+      <td class="${pnlColor}" style="font-weight: bold;">${pnlSign}${formatYen(datePnl)}</td>
+    `;
+    
+    logBody.appendChild(headerTr);
+    
+    const rowElements: HTMLTableRowElement[] = [];
+    
+    logs.forEach(log => {
+      const isWin = log.pnl >= 0;
+      const colorClass = isWin ? 'text-green' : 'text-red';
+      const sign = isWin ? '+' : '';
+      
+      const tr = document.createElement('tr');
+      tr.className = `trade-row`;
+      if (!isExpanded) tr.style.display = 'none';
+      
+      tr.innerHTML = `
+        <td>${log.time}</td>
+        <td class="text-amber">${log.ticker}</td>
+        <td>${log.side}</td>
+        <td>${formatYen(log.qty)}</td>
+        <td>${formatYen(log.price)}</td>
+        <td class="${colorClass}">${sign}${formatYen(log.pnl)}</td>
+      `;
+      logBody.appendChild(tr);
+      rowElements.push(tr);
+    });
+    
+    // Accordion toggle
+    headerTr.addEventListener('click', () => {
+      const currentlyHidden = rowElements[0]?.style.display === 'none';
+      const icon = headerTr.querySelector('.accordion-icon');
+      if (currentlyHidden) {
+        rowElements.forEach(r => r.style.display = '');
+        if (icon) icon.textContent = '▼';
+      } else {
+        rowElements.forEach(r => r.style.display = 'none');
+        if (icon) icon.textContent = '▶';
+      }
+    });
+  }
+
+  // Update header RLZ for TODAY only
+  const pnlColor = todayTotalPnl >= 0 ? 'text-green' : 'text-red';
+  const pnlSign = todayTotalPnl >= 0 ? '+' : '';
+  const rlzPct = ((todayTotalPnl / 10000000) * 100).toFixed(2);
+  
+  headerRlz.innerHTML = `TODAY RLZ <span class="${pnlColor}">${pnlSign}&yen;${formatYen(todayTotalPnl)} (${pnlSign}${rlzPct}%)</span>`;
   headerRlz.className = pnlColor;
 }
 

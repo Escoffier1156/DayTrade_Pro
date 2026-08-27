@@ -229,6 +229,14 @@ body {
 .log-table tr:hover {
   background: #0b1a2f;
 }
+.date-group-header {
+  background: #0f1c30;
+  border-top: 1px solid var(--panel-border);
+  border-bottom: 1px solid var(--panel-border) !important;
+}
+.date-group-header:hover {
+  background: #172a48 !important;
+}
 .log-summary {
   border-top: 1px solid var(--panel-border);
   padding: 8px;

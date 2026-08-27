@@ -21,6 +21,7 @@ export interface TargetsResponse {
 }
 
 export interface TradeLog {
+  date: string;
   time: string;
   ticker: string;
   name: string;
