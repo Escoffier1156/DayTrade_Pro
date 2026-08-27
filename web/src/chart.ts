@@ -107,6 +107,17 @@ export class TargetChart {
       this.dummySeries.setData(dummyData);
 
       this.chart.timeScale().fitContent();
+      
+      // Add explicit left padding to prevent marker clipping
+      setTimeout(() => {
+        const range = this.chart.timeScale().getVisibleLogicalRange();
+        if (range) {
+          this.chart.timeScale().setVisibleLogicalRange({
+            from: range.from - 10,
+            to: range.to + 5,
+          });
+        }
+      }, 10);
     }
   }
 
