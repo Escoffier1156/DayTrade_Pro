@@ -291,3 +291,33 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #2a3a50;
 }
+
+/* Context Menu */
+.context-menu {
+  position: absolute;
+  background: #0b1a2f;
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  z-index: 9999;
+  display: none;
+  min-width: 150px;
+  padding: 4px 0;
+}
+.context-menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  color: var(--text-main);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.context-menu-item:hover {
+  background: #172a48;
+}
+.context-menu-item.tp:hover {
+  color: var(--text-green);
+}
+.context-menu-item.sl:hover {
+  color: var(--text-red);
+}

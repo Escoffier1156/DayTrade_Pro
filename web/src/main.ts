@@ -13,12 +13,45 @@ const statsBody = document.getElementById('stats-body')!;
 const headerRlz = document.getElementById('header-rlz')!;
 const headerUnrlz = document.getElementById('header-unrlz')!;
 const panelUnrlz = document.getElementById('panel-unrlz')!;
+const contextMenu = document.getElementById('context-menu')!;
+const cmTp = document.getElementById('cm-tp')!;
+const cmSl = document.getElementById('cm-sl')!;
 
 // State
 let targetsData: Target[] = [];
 let historyData: TradeLog[] = [];
 let selectedSymbol: string | null = null;
 let mainChart: TargetChart | null = null;
+let contextMenuTarget: string | null = null;
+
+// Hide context menu on global click
+document.addEventListener('click', () => {
+  contextMenu.style.display = 'none';
+});
+
+async function handleManualAction(action: 'TP' | 'SL') {
+  if (!contextMenuTarget) return;
+  const isOk = confirm(`本当に ${contextMenuTarget} を手動${action === 'TP' ? '利確' : '損切'}しますか？`);
+  if (!isOk) return;
+  
+  try {
+    const res = await fetch('/api/action?k=l5cL0jRp9Yzcj_dRutcc43zNmZG0oOFb', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticker: contextMenuTarget, action })
+    });
+    if (res.ok) {
+      alert('手動決済リクエストを送信しました！(数秒後に反映されます)');
+    } else {
+      alert('エラーが発生しました。');
+    }
+  } catch (e) {
+    alert('通信エラー: ' + e);
+  }
+}
+
+cmTp.addEventListener('click', () => handleManualAction('TP'));
+cmSl.addEventListener('click', () => handleManualAction('SL'));
 
 function formatYen(num: number): string {
   return new Intl.NumberFormat('ja-JP').format(num);
@@ -107,6 +140,14 @@ function renderWatchlist() {
       selectedSymbol = target.code;
       renderWatchlist(); // re-render to update active class
       updateMainChart();
+    });
+
+    card.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      contextMenuTarget = target.code;
+      contextMenu.style.display = 'block';
+      contextMenu.style.left = `${e.pageX}px`;
+      contextMenu.style.top = `${e.pageY}px`;
     });
 
     watchlistGrid.appendChild(card);

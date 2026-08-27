@@ -370,6 +370,23 @@ def run_intraday_monitor(iteration_count: int):
             if t["status"] == "OPEN":
                 entry_px, target_px, stop_px = t["entry_price"], t["target"], t["stop"]
                 
+                # Check for manual overrides from the UI
+                if t.get("manual_action"):
+                    action = t.pop("manual_action")
+                    pnl = (px - entry_px) * t["shares"]
+                    if action == "TP":
+                        t["status"] = "HIT_TP"
+                        record_trade(code, t['name'], "SELL(MANUAL_TP)", t["shares"], px, pnl)
+                        slack_post(f"[手動利確 :tada:] {code} {t['name']}\nWEB画面より手動で利確決済されました。\n現在値: {px:,.1f} 円\n確定利益: +{pnl:,.0f} 円")
+                        print(f"{code} MANUAL TP! {px}")
+                    elif action == "SL":
+                        t["status"] = "HIT_SL"
+                        record_trade(code, t['name'], "SELL(MANUAL_SL)", t["shares"], px, pnl)
+                        slack_post(f"[手動損切 :rotating_light:] {code} {t['name']}\nWEB画面より手動で損切決済されました。\n現在値: {px:,.1f} 円\n確定損失: {pnl:,.0f} 円")
+                        print(f"{code} MANUAL SL! {px}")
+                    updated = True
+                    continue
+                
                 if px >= target_px:
                     t["status"] = "HIT_TP"
                     pnl = (px - entry_px) * t["shares"]

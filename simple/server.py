@@ -71,6 +71,50 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
         # Otherwise, serve static files under web/dist/
         super().do_GET()
 
+    def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        
+        if parsed.path == "/api/action":
+            if qs.get("k", [""])[0] != WEB_TOKEN:
+                self.send_error(403, "Forbidden")
+                return
+            
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            
+            try:
+                payload = json.loads(post_data.decode('utf-8'))
+                ticker = payload.get("ticker")
+                action = payload.get("action")
+                
+                if not ticker or action not in ["TP", "SL"]:
+                    self.send_error(400, "Bad Request")
+                    return
+                    
+                if TARGETS_FILE.exists():
+                    data = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
+                    updated = False
+                    for t in data.get("targets", []):
+                        if t["code"] == str(ticker) and t["status"] == "OPEN":
+                            t["manual_action"] = action
+                            updated = True
+                            break
+                            
+                    if updated:
+                        TARGETS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+                        
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "success"}).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, f"Internal Server Error: {e}")
+            return
+            
+        self.send_error(404, "Not Found")
+
 class ReusableTCPServer(socketserver.TCPServer):
     allow_reuse_address = True
 
