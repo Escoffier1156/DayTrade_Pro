@@ -93,10 +93,10 @@ export class TargetChart {
         this.markersPrimitive = createSeriesMarkers(this.areaSeries, markers);
       }
       
-      // Add dummy data for 09:00 to 15:30 to stretch the time axis
+      // Add dummy data for 08:30 to 15:30 to stretch the time axis and provide left padding
       const secondsInDay = 86400;
       const startOfDay = Math.floor(firstPoint.time / secondsInDay) * secondsInDay;
-      const openTime = startOfDay + 9 * 3600; // 09:00
+      const openTime = startOfDay + 8 * 3600 + 30 * 60; // 08:30
       const closeTime = startOfDay + 15 * 3600 + 30 * 60; // 15:30
       
       const dummyData = [];
