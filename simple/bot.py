@@ -35,7 +35,7 @@ MASTER = "/equities/master"
 AVG_WINDOW = 20
 
 # Kabutan Screener
-TARGET_URL = "https://kabutan.jp/warning/?mode=2_1&market=0&capitalization=3&dispmode=normal&stc=&stm=0&page={page}"
+TARGET_URL = "https://kabutan.jp/warning/?mode=2_9&page={page}"
 MAX_PAGES = 5
 MIN_AVG_VOLUME = 400_000
 MIN_AVG_TURNOVER = 3_000_000_000
@@ -265,7 +265,7 @@ def run_morning_screener():
     for r in all_rows:
         u = universe.get(r["code"])
         # 硬い銘柄: Turnover >= 5 billion, Price >= 500, +1% <= change_pct <= +4%
-        if u and u["avg_volume"] >= MIN_AVG_VOLUME and u["avg_turnover"] >= 5000000000 and r.get("price", 0) >= 500:
+        if u and u["avg_volume"] >= MIN_AVG_VOLUME and u["avg_turnover"] >= MIN_AVG_TURNOVER and r.get("price", 0) >= 500:
             cp = r.get("change_pct", 0)
             if cp is not None and 1.0 <= cp <= 4.0:
                 r.update({"avg_volume": u["avg_volume"], "avg_turnover": u["avg_turnover"], "sector": u["sector"]})
@@ -274,7 +274,7 @@ def run_morning_screener():
     filtered.sort(key=lambda x: -(x["change_pct"] or -99))
     targets = []
     lines = [
-        f"【買い付け推奨】地合い: {regime} (日経 {n_pct:+.2f}%) -> {pick_count}銘柄厳選",
+        f"【買い付け枠】地合い: {regime} (日経 {n_pct:+.2f}%) -> 最大 {pick_count} 銘柄を探索",
         f"条件: 出来高{MIN_AVG_VOLUME//10000}万株以上, 売買代金{MIN_AVG_TURNOVER//100000000}億円以上\n"
     ]
     
