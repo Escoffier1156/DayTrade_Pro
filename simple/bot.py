@@ -35,8 +35,15 @@ MASTER = "/equities/master"
 AVG_WINDOW = 20
 
 # Kabutan Screener
-TARGET_URL = "https://kabutan.jp/warning/?mode=2_9&page={page}"
-MAX_PAGES = 5
+TARGET_URLS = [
+    "https://kabutan.jp/warning/?mode=2_9",
+    "https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=-1&dispmode=normal&stc=&stm=0&page=2",
+    "https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=-1&dispmode=normal&stc=&stm=0&page=3",
+    "https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=-1&dispmode=normal&stc=&stm=0&page=4",
+    "https://kabutan.jp/warning/?mode=2_9&capitalization=3&dispmode=normal",
+    "https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=3&dispmode=normal&stc=&stm=0&page=2",
+    "https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=3&dispmode=normal&stc=&stm=0&page=3"
+]
 MIN_AVG_VOLUME = 400_000
 MIN_AVG_TURNOVER = 3_000_000_000
 TP_PCT = 2.5
@@ -244,15 +251,14 @@ def run_morning_screener():
     print("Scraping today's active stocks from Kabutan...")
     all_rows = []
     nikkei = {}
-    for page in range(1, MAX_PAGES + 1):
+    for i, url in enumerate(TARGET_URLS):
         try:
-            doc = fetch_page(TARGET_URL.format(page=page), cookie)
-            if page == 1: nikkei = parse_nikkei(doc)
+            doc = fetch_page(url, cookie)
+            if i == 0: nikkei = parse_nikkei(doc)
             page_rows = parse_ranking(doc)
             all_rows.extend(page_rows)
         except Exception as e:
-            print(f"  Page {page} Fetch failed: {e}")
-            break
+            print(f"  URL {url} Fetch failed: {e}")
             
     n_pct = nikkei.get("pct", 0)
     if n_pct >= NIKKEI_STRONG: pick_count, regime = 5, "Bullish"
