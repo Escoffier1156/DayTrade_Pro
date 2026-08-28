@@ -34,6 +34,7 @@ CALENDAR = "/markets/calendar"
 MASTER = "/equities/master"
 AVG_WINDOW = 20
 
+# [LOCK: strict]
 # Kabutan Screener
 TARGET_URLS = [
     "https://kabutan.jp/warning/?mode=2_9",
@@ -44,6 +45,7 @@ TARGET_URLS = [
     "https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=3&dispmode=normal&stc=&stm=0&page=2",
     "https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=3&dispmode=normal&stc=&stm=0&page=3"
 ]
+# [/LOCK]
 MIN_AVG_VOLUME = 400_000
 MIN_AVG_TURNOVER = 3_000_000_000
 TP_PCT = 2.5
@@ -267,6 +269,7 @@ def run_morning_screener():
         
     print(f"\nNikkei Average: {n_pct:+.2f}% ({regime}) -> Picking {pick_count} symbols")
     
+    # [LOCK: strict]
     filtered = []
     for r in all_rows:
         u = universe.get(r["code"])
@@ -278,6 +281,7 @@ def run_morning_screener():
                 filtered.append(r)
             
     filtered.sort(key=lambda x: -(x["change_pct"] or -99))
+    # [/LOCK]
     targets = []
     lines = [
         f"【買い付け枠】地合い: {regime} (日経 {n_pct:+.2f}%) -> 最大 {pick_count} 銘柄を探索",
@@ -474,6 +478,7 @@ def main():
             today_str = now.date().isoformat()
             time_hm = now.hour * 100 + now.minute
             
+            # [LOCK: strict]
             # --- 08:55 : fetch_yesterday (Generate J-Quants Universe) ---
             if now.hour == 8 and now.minute >= 55 and get_last_run("fetch") != today_str:
                 print(f"[{now.strftime('%H:%M:%S')}] Executing: run_fetch_yesterday()")
@@ -486,6 +491,7 @@ def main():
                 print(f"[{now.strftime('%H:%M:%S')}] Executing: run_morning_screener()")
                 try: run_morning_screener()
                 except Exception as e: print(f"morning_screener Error: {e}")
+            # [/LOCK]
                 set_last_run("screener", today_str)
                 
             # --- 08:55 ~ 11:30, 12:30 ~ 15:30 : intraday_monitor (Intraday Monitoring) ---
