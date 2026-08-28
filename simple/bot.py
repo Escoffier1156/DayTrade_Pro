@@ -468,8 +468,8 @@ def main():
             today_str = now.date().isoformat()
             time_hm = now.hour * 100 + now.minute
             
-            # --- 08:30 : fetch_yesterday (Generate J-Quants Universe) ---
-            if now.hour == 8 and now.minute >= 30 and get_last_run("fetch") != today_str:
+            # --- 08:55 : fetch_yesterday (Generate J-Quants Universe) ---
+            if now.hour == 8 and now.minute >= 55 and get_last_run("fetch") != today_str:
                 print(f"[{now.strftime('%H:%M:%S')}] Executing: run_fetch_yesterday()")
                 try: run_fetch_yesterday()
                 except Exception as e: print(f"fetch_yesterday Error: {e}")
