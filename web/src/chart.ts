@@ -59,11 +59,11 @@ export class TargetChart {
       }));
       // @ts-ignore
       this.areaSeries.setData(jstHistory);
-      
+
       // Add markers
       const markers: any[] = [];
       const firstPoint = jstHistory[0];
-      
+
       // Entry Marker
       markers.push({
         time: firstPoint.time,
@@ -71,7 +71,7 @@ export class TargetChart {
         color: '#3b82f6',
         shape: 'circle',
       });
-      
+
       // Exit Marker (if closed)
       if (target.status !== 'OPEN') {
         const lastPoint = jstHistory[jstHistory.length - 1];
@@ -83,20 +83,20 @@ export class TargetChart {
           shape: 'circle',
         });
       }
-      
-      
+
+
       if (this.markersPrimitive) {
         this.markersPrimitive.setMarkers(markers);
       } else {
         this.markersPrimitive = createSeriesMarkers(this.areaSeries, markers);
       }
-      
+
       // Add dummy data for 08:30 to 15:30 to stretch the time axis and provide left padding
       const secondsInDay = 86400;
       const startOfDay = Math.floor(firstPoint.time / secondsInDay) * secondsInDay;
       const openTime = startOfDay + 8 * 3600 + 30 * 60; // 08:30
       const closeTime = startOfDay + 15 * 3600 + 30 * 60; // 15:30
-      
+
       const dummyData = [];
       for (let t = openTime; t <= closeTime; t += 60) {
         dummyData.push({ time: t, value: 0 });
@@ -105,7 +105,7 @@ export class TargetChart {
       this.dummySeries.setData(dummyData);
 
       this.chart.timeScale().fitContent();
-      
+
       // Add explicit left padding to prevent marker clipping
       setTimeout(() => {
         const range = this.chart.timeScale().getVisibleLogicalRange();
@@ -135,7 +135,7 @@ export class TargetChart {
       lineStyle: LineStyle.Dashed,
       axisLabelVisible: true,
     });
-    
+
     this.areaSeries.createPriceLine({
       price: target.entry_price,
       color: '#d1d5db', // Gray for Entry
