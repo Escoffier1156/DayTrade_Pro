@@ -1,0 +1,41 @@
+{
+  "version": "2.0.0",
+  "locks": {
+    "simple/bot.py#lock_0": {
+      "file_path": "simple/bot.py",
+      "lock_index": 0,
+      "mode": "strict",
+      "strict_hash": "392f5979df5b31e6e5f8e2e3f32235bc3d787c475d8d120774bf06b7f298f222",
+      "ast_hash": "b90683471d06de291e239d876732aed1618205c604d1a0e99bc16316912899af",
+      "original_code": "# Kabutan Screener\nTARGET_URLS = [\n    \"https://kabutan.jp/warning/?mode=2_9\",\n    \"https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=-1&dispmode=normal&stc=&stm=0&page=2\",\n    \"https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=-1&dispmode=normal&stc=&stm=0&page=3\",\n    \"https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=-1&dispmode=normal&stc=&stm=0&page=4\",\n    \"https://kabutan.jp/warning/?mode=2_9&capitalization=3&dispmode=normal\",\n    \"https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=3&dispmode=normal&stc=&stm=0&page=2\",\n    \"https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=3&dispmode=normal&stc=&stm=0&page=3\"\n]",
+      "cached_counterexamples": [],
+      "target_symbol": null,
+      "start_line": 37,
+      "end_line": 48
+    },
+    "simple/bot.py#lock_1": {
+      "file_path": "simple/bot.py",
+      "lock_index": 1,
+      "mode": "strict",
+      "strict_hash": "f969903cf35f2d05327c09b1b64d269b85bed2fb5b63124b49d99fdeb830e590",
+      "ast_hash": "cc6ffb675f0b04cee9ac430d1d611f0f6e0edb67852ad52785f2c4d475919fbc",
+      "original_code": "    filtered = []\n    for r in all_rows:\n        u = universe.get(r[\"code\"])\n        # 硬い銘柄: Turnover >= 3 billion, Price >= 500, 0.0% <= change_pct < +5.0%\n        if u and u[\"avg_volume\"] >= MIN_AVG_VOLUME and u[\"avg_turnover\"] >= MIN_AVG_TURNOVER and r.get(\"price\", 0) >= 500:\n            cp = r.get(\"change_pct\", 0)\n            if cp is not None and 0.0 <= cp < 5.0:\n                r.update({\"avg_volume\": u[\"avg_volume\"], \"avg_turnover\": u[\"avg_turnover\"], \"sector\": u[\"sector\"]})\n                filtered.append(r)\n            \n    filtered.sort(key=lambda x: -(x[\"change_pct\"] or -99))",
+      "cached_counterexamples": [],
+      "target_symbol": null,
+      "start_line": 272,
+      "end_line": 284
+    },
+    "simple/bot.py#lock_2": {
+      "file_path": "simple/bot.py",
+      "lock_index": 2,
+      "mode": "strict",
+      "strict_hash": "2211152fc94ad20e7a02a41d05ccfe524f013535e1861f3cc4e10f0529e178da",
+      "ast_hash": "50c0c16f7f670b6368f55dcca93007299870370d7b79c51f70f623ac220e63dc",
+      "original_code": "            # --- 08:55 : fetch_yesterday (Generate J-Quants Universe) ---\n            if now.hour == 8 and now.minute >= 55 and get_last_run(\"fetch\") != today_str:\n                print(f\"[{now.strftime('%H:%M:%S')}] Executing: run_fetch_yesterday()\")\n                try: run_fetch_yesterday()\n                except Exception as e: print(f\"fetch_yesterday Error: {e}\")\n                set_last_run(\"fetch\", today_str)\n                \n            # --- 09:10 : morning_screener (Kabutan Screening) ---\n            if now.hour == 9 and now.minute >= 10 and now.minute < 30 and get_last_run(\"screener\") != today_str:\n                print(f\"[{now.strftime('%H:%M:%S')}] Executing: run_morning_screener()\")\n                try: run_morning_screener()\n                except Exception as e: print(f\"morning_screener Error: {e}\")",
+      "cached_counterexamples": [],
+      "target_symbol": null,
+      "start_line": 481,
+      "end_line": 494
+    }
+  }
+}
