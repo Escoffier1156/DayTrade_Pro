@@ -270,10 +270,10 @@ def run_morning_screener():
     filtered = []
     for r in all_rows:
         u = universe.get(r["code"])
-        # 硬い銘柄: Turnover >= 3 billion, Price >= 500, change_pct < +5.0%
+        # 硬い銘柄: Turnover >= 3 billion, Price >= 500, 0.0% <= change_pct < +5.0%
         if u and u["avg_volume"] >= MIN_AVG_VOLUME and u["avg_turnover"] >= MIN_AVG_TURNOVER and r.get("price", 0) >= 500:
             cp = r.get("change_pct", 0)
-            if cp is not None and cp < 5.0:
+            if cp is not None and 0.0 <= cp < 5.0:
                 r.update({"avg_volume": u["avg_volume"], "avg_turnover": u["avg_turnover"], "sector": u["sector"]})
                 filtered.append(r)
             
