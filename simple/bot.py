@@ -264,10 +264,10 @@ def run_morning_screener():
     filtered = []
     for r in all_rows:
         u = universe.get(r["code"])
-        # 硬い銘柄: Turnover >= 5 billion, Price >= 500, +1% <= change_pct <= +4%
+        # 硬い銘柄: Turnover >= 3 billion, Price >= 500, change_pct < +5.0%
         if u and u["avg_volume"] >= MIN_AVG_VOLUME and u["avg_turnover"] >= MIN_AVG_TURNOVER and r.get("price", 0) >= 500:
             cp = r.get("change_pct", 0)
-            if cp is not None and 1.0 <= cp <= 4.0:
+            if cp is not None and cp < 5.0:
                 r.update({"avg_volume": u["avg_volume"], "avg_turnover": u["avg_turnover"], "sector": u["sector"]})
                 filtered.append(r)
             
@@ -468,8 +468,8 @@ def main():
             today_str = now.date().isoformat()
             time_hm = now.hour * 100 + now.minute
             
-            # --- 23:00 : fetch_yesterday (Generate J-Quants Universe) ---
-            if now.hour == 23 and now.minute >= 0 and get_last_run("fetch") != today_str:
+            # --- 08:30 : fetch_yesterday (Generate J-Quants Universe) ---
+            if now.hour == 8 and now.minute >= 30 and get_last_run("fetch") != today_str:
                 print(f"[{now.strftime('%H:%M:%S')}] Executing: run_fetch_yesterday()")
                 try: run_fetch_yesterday()
                 except Exception as e: print(f"fetch_yesterday Error: {e}")
