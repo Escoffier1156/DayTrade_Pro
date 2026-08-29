@@ -386,13 +386,15 @@ def run_intraday_monitor(iteration_count: int):
                     pnl = (px - entry_px) * t["shares"]
                     if action == "TP":
                         t["status"] = "HIT_TP"
+                        now_str = _dt.datetime.now().strftime('%H:%M:%S')
                         record_trade(code, t['name'], "SELL(MANUAL_TP)", t["shares"], px, pnl)
-                        slack_post(f"[手動利確 :tada:] {code} {t['name']}\nWEB画面より手動で利確決済されました。\n現在値: {px:,.1f} 円\n確定利益: +{pnl:,.0f} 円")
+                        slack_post(f"[手動利確 :tada:] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定利益: +{pnl:,.0f} 円")
                         print(f"{code} MANUAL TP! {px}")
                     elif action == "SL":
                         t["status"] = "HIT_SL"
+                        now_str = _dt.datetime.now().strftime('%H:%M:%S')
                         record_trade(code, t['name'], "SELL(MANUAL_SL)", t["shares"], px, pnl)
-                        slack_post(f"[手動損切 :rotating_light:] {code} {t['name']}\nWEB画面より手動で損切決済されました。\n現在値: {px:,.1f} 円\n確定損失: {pnl:,.0f} 円")
+                        slack_post(f"[手動損切 :rotating_light:] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定損失: {pnl:,.0f} 円")
                         print(f"{code} MANUAL SL! {px}")
                     updated = True
                     continue
@@ -400,8 +402,9 @@ def run_intraday_monitor(iteration_count: int):
                 if px >= target_px:
                     t["status"] = "HIT_TP"
                     pnl = (px - entry_px) * t["shares"]
+                    now_str = _dt.datetime.now().strftime('%H:%M:%S')
                     record_trade(code, t['name'], "SELL(TP)", t["shares"], px, pnl)
-                    slack_post(f"[利確到達 :tada:] {code} {t['name']}\n現在値 {px:,.1f} 円が利確目標 ({target_px:,.1f} 円) に到達しました。\n見込利益: +{pnl:,.0f} 円")
+                    slack_post(f"[利確到達 :tada:] {code} {t['name']}\n到達時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定利益: +{pnl:,.0f} 円")
                     print(f"{code} HIT TP! {px}")
                 elif px <= stop_px:
                     now_time = _dt.datetime.now()
@@ -409,14 +412,16 @@ def run_intraday_monitor(iteration_count: int):
                     
                     if time_hm < 945:
                         if not t.get("sl_warned"):
-                            slack_post(f"[損切警告 :warning:] {code} {t['name']}\n現在値 {px:,.1f} 円が損切ライン ({stop_px:,.1f} 円) を下回りました。\n09:45まで様子見を継続します。")
+                            now_str = now_time.strftime('%H:%M:%S')
+                            slack_post(f"[損切警告 :warning:] {code} {t['name']}\n到達時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n現在値: {px:,.1f} 円\n損切ライン ({stop_px:,.1f} 円) を下回りました。\n09:45まで様子見を継続します。")
                             t["sl_warned"] = True
                             print(f"{code} SL Warning triggered before 9:45.")
                     else:
                         t["status"] = "HIT_SL"
                         pnl = (px - entry_px) * t["shares"]
+                        now_str = now_time.strftime('%H:%M:%S')
                         record_trade(code, t['name'], "SELL(SL)", t["shares"], px, pnl)
-                        slack_post(f"[損切確定 :rotating_light:] {code} {t['name']}\n現在値 {px:,.1f} 円が損切ライン ({stop_px:,.1f} 円) に到達しました。\n見込損失: {pnl:,.0f} 円")
+                        slack_post(f"[損切確定 :rotating_light:] {code} {t['name']}\n到達時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定損失: {pnl:,.0f} 円")
                         print(f"{code} HIT SL! {px}")
                 
         if updated:
