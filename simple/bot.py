@@ -388,13 +388,13 @@ def run_intraday_monitor(iteration_count: int):
                         t["status"] = "HIT_TP"
                         now_str = _dt.datetime.now().strftime('%H:%M:%S')
                         record_trade(code, t['name'], "SELL(MANUAL_TP)", t["shares"], px, pnl)
-                        slack_post(f"[手動利確 :tada:] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定利益: +{pnl:,.0f} 円")
+                        slack_post(f"[手動利確] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定利益: +{pnl:,.0f} 円")
                         print(f"{code} MANUAL TP! {px}")
                     elif action == "SL":
                         t["status"] = "HIT_SL"
                         now_str = _dt.datetime.now().strftime('%H:%M:%S')
                         record_trade(code, t['name'], "SELL(MANUAL_SL)", t["shares"], px, pnl)
-                        slack_post(f"[手動損切 :rotating_light:] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定損失: {pnl:,.0f} 円")
+                        slack_post(f"[手動損切] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定損失: {pnl:,.0f} 円")
                         print(f"{code} MANUAL SL! {px}")
                     updated = True
                     continue
@@ -404,7 +404,7 @@ def run_intraday_monitor(iteration_count: int):
                     pnl = (px - entry_px) * t["shares"]
                     now_str = _dt.datetime.now().strftime('%H:%M:%S')
                     record_trade(code, t['name'], "SELL(TP)", t["shares"], px, pnl)
-                    slack_post(f"[利確到達 :tada:] {code} {t['name']}\n到達時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定利益: +{pnl:,.0f} 円")
+                    slack_post(f"[利確到達] {code} {t['name']}\n到達時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定利益: +{pnl:,.0f} 円")
                     print(f"{code} HIT TP! {px}")
                 elif px <= stop_px:
                     now_time = _dt.datetime.now()
@@ -413,7 +413,7 @@ def run_intraday_monitor(iteration_count: int):
                     if time_hm < 945:
                         if not t.get("sl_warned"):
                             now_str = now_time.strftime('%H:%M:%S')
-                            slack_post(f"[損切警告 :warning:] {code} {t['name']}\n到達時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n現在値: {px:,.1f} 円\n損切ライン ({stop_px:,.1f} 円) を下回りました。\n09:45まで様子見を継続します。")
+                            slack_post(f"[損切警告] {code} {t['name']}\n到達時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n現在値: {px:,.1f} 円\n損切ライン ({stop_px:,.1f} 円) を下回りました。\n09:45まで様子見を継続します。")
                             t["sl_warned"] = True
                             print(f"{code} SL Warning triggered before 9:45.")
                     else:
@@ -421,7 +421,7 @@ def run_intraday_monitor(iteration_count: int):
                         pnl = (px - entry_px) * t["shares"]
                         now_str = now_time.strftime('%H:%M:%S')
                         record_trade(code, t['name'], "SELL(SL)", t["shares"], px, pnl)
-                        slack_post(f"[損切確定 :rotating_light:] {code} {t['name']}\n到達時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定損失: {pnl:,.0f} 円")
+                        slack_post(f"[損切確定] {code} {t['name']}\n到達時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定損失: {pnl:,.0f} 円")
                         print(f"{code} HIT SL! {px}")
                 
         if updated:
@@ -452,16 +452,16 @@ def run_daily_report():
             latest = t.get("latest_price", entry)
             exit_px = latest
             
-            if status == "HIT_TP": result = "🟢 利確"
-            elif status == "HIT_SL": result = "🔴 損切"
-            else: result = "⚪ 未決済 (大引け)"
+            if status == "HIT_TP": result = "利確"
+            elif status == "HIT_SL": result = "損切"
+            else: result = "未決済 (大引け)"
                 
             pnl = (exit_px - entry) * shares
             total_pnl += pnl
             lines.extend([f"{i}. {code} {name} - {result}", f"   エントリー: {entry:,.1f}円 -> 決済/現在値: {exit_px:,.1f}円", f"   数量: {shares:,}株", f"   損益: {pnl:+,.0f}円", ""])
             
         lines.append("---")
-        lines.append(f"💰 本日の合計損益: {total_pnl:+,.0f}円")
+        lines.append(f"本日の合計損益: {total_pnl:+,.0f}円")
         
     text = "\n".join(lines)
     slack_post(text)
