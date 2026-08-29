@@ -478,6 +478,11 @@ def main():
             today_str = now.date().isoformat()
             time_hm = now.hour * 100 + now.minute
             
+            # Skip execution on weekends (Saturday=5, Sunday=6)
+            if now.weekday() >= 5:
+                time.sleep(60)
+                continue
+                
             # [LOCK: strict]
             # --- 08:55 : fetch_yesterday (Generate J-Quants Universe) ---
             if now.hour == 8 and now.minute >= 55 and get_last_run("fetch") != today_str:
