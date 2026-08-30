@@ -70,16 +70,41 @@ function calculateSLRisk(entry: number, current: number, sl: number): number {
 }
 
 // Clock
+const JPHolidays = [
+  "2026-01-01", "2026-01-12", "2026-02-11", "2026-02-23", "2026-03-20",
+  "2026-04-29", "2026-05-03", "2026-05-04", "2026-05-05", "2026-05-06",
+  "2026-07-20", "2026-08-11", "2026-09-21", "2026-09-22", "2026-09-23",
+  "2026-10-12", "2026-11-03", "2026-11-23", "2026-12-31",
+  "2027-01-01", "2027-01-02", "2027-01-03", "2027-01-11"
+];
+
+function isMarketClosedDay(date: Date) {
+  if (date.getDay() === 0 || date.getDay() === 6) return true;
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return JPHolidays.includes(`${yyyy}-${mm}-${dd}`);
+}
+
 function updateTime() {
   const now = new Date();
   timeDisplay.textContent = now.toLocaleTimeString('ja-JP', { hour12: false });
   
   const hm = now.getHours() * 100 + now.getMinutes();
-  const isWeekend = now.getDay() === 0 || now.getDay() === 6;
+  const isClosedDay = isMarketClosedDay(now);
   const badge = document.getElementById('live-badge');
+  const overlay = document.getElementById('market-closed-overlay');
+  
+  if (overlay) {
+    if (isClosedDay) {
+      overlay.style.display = 'flex';
+    } else {
+      overlay.style.display = 'none';
+    }
+  }
   
   if (badge) {
-    if (isWeekend || hm >= 1530 || hm < 900) {
+    if (isClosedDay || hm >= 1530 || hm < 900) {
       badge.textContent = 'MARKET CLOSED';
       badge.style.background = '#4b5563'; // gray
       badge.style.color = 'white';
