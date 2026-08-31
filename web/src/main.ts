@@ -120,7 +120,7 @@ setInterval(updateTime, 1000);
 
 function renderWatchlist() {
   watchlistGrid.innerHTML = '';
-  targetsData.filter(t => t.status !== 'HIT_SL').forEach(target => {
+  targetsData.forEach(target => {
     const card = document.createElement('div');
     const isActive = selectedSymbol === target.code;
     card.className = `watchlist-card ${isActive ? 'active' : ''}`;
