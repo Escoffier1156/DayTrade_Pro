@@ -428,6 +428,42 @@ def run_intraday_monitor(iteration_count: int):
 
 
 # =========================================================
+# daily_report (Daily Report)
+# =========================================================
+def run_daily_report():
+    if not TARGETS_FILE.exists(): return
+    try: data = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
+    except: return
+        
+    target_date = data.get("date")
+    targets = data.get("targets", [])
+    total_pnl = 0
+    lines = [f"【本日の運用成績レポート】 ({target_date})", "---"]
+    
+    if not targets:
+        lines.append("本日の取引対象銘柄はありませんでした。")
+    else:
+        for i, t in enumerate(targets, 1):
+            code, name, status, entry, shares = t["code"], t["name"], t["status"], t["entry_price"], t["shares"]
+            latest = t.get("latest_price", entry)
+            exit_px = latest
+            
+            if status == "HIT_TP": result = "利確"
+            elif status == "HIT_SL": result = "損切"
+            else: result = "未決済 (大引け)"
+                
+            pnl = (exit_px - entry) * shares
+            total_pnl += pnl
+            lines.extend([f"{i}. {code} {name} - {result}", f"   エントリー: {entry:,.1f}円 -> 決済/現在値: {exit_px:,.1f}円", f"   数量: {shares:,}株", f"   損益: {pnl:+,.0f}円", ""])
+            
+        lines.append("---")
+        lines.append(f"本日の合計損益: {total_pnl:+,.0f}円")
+        
+    text = "\n".join(lines)
+    slack_post(text)
+    print("Daily report sent.")
+
+# =========================================================
 # Main Loop (Scheduler)
 # =========================================================
 def main():
@@ -477,9 +513,18 @@ def main():
                 if is_monitoring:
                     print(f"[{now.strftime('%H:%M:%S')}] --- Monitoring Mode Ended ---")
                     is_monitoring = False
-            # --- (Disabled) 15:40 : daily_report (Daily Report) ---
-            # 最終損益通知は手動決済と重複するため廃止
-                
+            if STATE_FILE.exists():
+                try:
+                    state_data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+                    if state_data.get("trigger_report"):
+                        print(f"[{now.strftime('%H:%M:%S')}] Manual Trigger: Executing run_daily_report()")
+                        try: run_daily_report()
+                        except Exception as e: print(f"daily_report Error: {e}")
+                        state_data["trigger_report"] = False
+                        STATE_FILE.write_text(json.dumps(state_data, ensure_ascii=False, indent=2), encoding="utf-8")
+                except Exception as e:
+                    print(f"Failed to check manual triggers: {e}")
+            
             time.sleep(1)
             
         except KeyboardInterrupt:

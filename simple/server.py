@@ -126,6 +126,29 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(500, f"Internal Server Error: {e}")
             return
             
+        if parsed.path == "/api/report":
+            if qs.get("k", [""])[0] != WEB_TOKEN:
+                self.send_error(403, "Forbidden")
+                return
+            
+            try:
+                state_file = ROOT / "data" / "bot_state.json"
+                if state_file.exists():
+                    state = json.loads(state_file.read_text(encoding="utf-8"))
+                else:
+                    state = {}
+                state["trigger_report"] = True
+                state_file.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+                
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "success"}).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, f"Internal Server Error: {e}")
+            return
+            
         self.send_error(404, "Not Found")
 
 class ReusableTCPServer(socketserver.TCPServer):

@@ -53,6 +53,25 @@ async function handleManualAction(action: 'TP' | 'SL') {
 cmTp.addEventListener('click', () => handleManualAction('TP'));
 cmSl.addEventListener('click', () => handleManualAction('SL'));
 
+const btnNotifyReport = document.getElementById('btn-notify-report');
+if (btnNotifyReport) {
+  btnNotifyReport.addEventListener('click', async () => {
+    const isOk = confirm('本日の最終損益レポートをSlackに通知しますか？');
+    if (!isOk) return;
+    
+    try {
+      const res = await fetch('/api/report?k=l5cL0jRp9Yzcj_dRutcc43zNmZG0oOFb', { method: 'POST' });
+      if (res.ok) {
+        alert('レポート通知リクエストを送信しました！(数秒後にSlackに投稿されます)');
+      } else {
+        alert('エラーが発生しました。');
+      }
+    } catch (e) {
+      alert('通信エラー: ' + e);
+    }
+  });
+}
+
 function formatYen(num: number): string {
   return new Intl.NumberFormat('ja-JP').format(num);
 }
