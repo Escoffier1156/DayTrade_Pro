@@ -315,26 +315,20 @@ def run_morning_screener():
 # intraday_monitor (Intraday Monitoring)
 # =========================================================
 def fetch_bulk_prices(targets: list, cookie: str) -> dict:
-    codes = [t["code"] for t in targets]
-    if not codes: return {}
-        
-    data = urllib.parse.urlencode([("codes[]", c) for c in codes]).encode("utf-8")
-    req = urllib.request.Request("https://kabutan.jp/favorite/stock/", data=data,
-        headers={"User-Agent": UA, "Cookie": cookie, "Accept-Encoding": "gzip", "Content-Type": "application/x-www-form-urlencoded"})
-    
     prices = {}
-    try:
-        with urllib.request.urlopen(req, timeout=15) as r:
-            raw = gzip.decompress(r.read()) if r.headers.get("Content-Encoding") == "gzip" else r.read()
-            res_json = json.loads(raw.decode("utf-8", "replace"))
-            for row in (res_json if isinstance(res_json, list) else res_json.get("data", [])):
-                if len(row) >= 2:
-                    code, px_str = str(row[0]), str(row[1]).replace(",", "")
-                    if px_str and px_str not in ["－", "-"]:
-                        try: prices[code] = float(px_str)
-                        except ValueError: pass
-    except Exception as e:
-        print(f"API Bulk Fetch Error: {e}")
+    for t in targets:
+        code = t["code"]
+        url = f"https://kabutan.jp/stock/?code={code}"
+        req = urllib.request.Request(url, headers={"User-Agent": UA})
+        try:
+            with urllib.request.urlopen(req, timeout=5) as r:
+                html = r.read().decode("utf-8", "replace")
+                m = re.search(r'<span class="kabuka">([\d,.]+)円</span>', html)
+                if m:
+                    prices[code] = float(m.group(1).replace(",", ""))
+            time.sleep(1)
+        except Exception as e:
+            print(f"[{code}] Fetch Error: {e}")
     return prices
 
 def record_trade(code: str, name: str, side: str, qty: int, price: float, pnl: float):
@@ -431,41 +425,7 @@ def run_intraday_monitor(iteration_count: int):
     except Exception as e:
         print(f"Monitor step error: {e}")
 
-# =========================================================
-# daily_report (Daily Report)
-# =========================================================
-def run_daily_report():
-    if not TARGETS_FILE.exists(): return
-    try: data = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
-    except: return
-        
-    target_date = data.get("date")
-    targets = data.get("targets", [])
-    total_pnl = 0
-    lines = [f"【本日の運用成績レポート】 ({target_date})", "---"]
-    
-    if not targets:
-        lines.append("本日の取引対象銘柄はありませんでした。")
-    else:
-        for i, t in enumerate(targets, 1):
-            code, name, status, entry, shares = t["code"], t["name"], t["status"], t["entry_price"], t["shares"]
-            latest = t.get("latest_price", entry)
-            exit_px = latest
-            
-            if status == "HIT_TP": result = "利確"
-            elif status == "HIT_SL": result = "損切"
-            else: result = "未決済 (大引け)"
-                
-            pnl = (exit_px - entry) * shares
-            total_pnl += pnl
-            lines.extend([f"{i}. {code} {name} - {result}", f"   エントリー: {entry:,.1f}円 -> 決済/現在値: {exit_px:,.1f}円", f"   数量: {shares:,}株", f"   損益: {pnl:+,.0f}円", ""])
-            
-        lines.append("---")
-        lines.append(f"本日の合計損益: {total_pnl:+,.0f}円")
-        
-    text = "\n".join(lines)
-    slack_post(text)
-    print("Daily report sent.")
+
 
 # =========================================================
 # Main Loop (Scheduler)
@@ -517,13 +477,8 @@ def main():
                 if is_monitoring:
                     print(f"[{now.strftime('%H:%M:%S')}] --- Monitoring Mode Ended ---")
                     is_monitoring = False
-            
-            # --- 15:40 : daily_report (Daily Report) ---
-            if now.hour == 15 and now.minute >= 40 and get_last_run("report") != today_str:
-                print(f"[{now.strftime('%H:%M:%S')}] Executing: run_daily_report()")
-                try: run_daily_report()
-                except Exception as e: print(f"daily_report Error: {e}")
-                set_last_run("report", today_str)
+            # --- (Disabled) 15:40 : daily_report (Daily Report) ---
+            # 最終損益通知は手動決済と重複するため廃止
                 
             time.sleep(1)
             
