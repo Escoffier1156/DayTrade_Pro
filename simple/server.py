@@ -84,6 +84,17 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
                     data = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
                     target_date = data.get("date")
                     targets = data.get("targets", [])
+                    
+                    history_map = {}
+                    if HISTORY_FILE.exists():
+                        try:
+                            history_data = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+                            for h in history_data:
+                                if h.get("date") == target_date:
+                                    history_map[str(h.get("ticker"))] = h
+                        except Exception:
+                            pass
+                            
                     total_pnl = 0
                     lines = [f"【本日の運用成績レポート】 ({target_date})", "---"]
                     
@@ -92,17 +103,25 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
                     else:
                         for i, t in enumerate(targets, 1):
                             code, name, status, entry, shares = t["code"], t["name"], t["status"], t["entry_price"], t["shares"]
-                            latest = t.get("latest_price", entry)
                             
-                            if status == "HIT_TP": result = "利確"
-                            elif status == "HIT_SL": result = "損切"
-                            else: result = "未決済 (大引け)"
+                            if status in ["HIT_TP", "HIT_SL"]:
+                                if code in history_map:
+                                    h = history_map[code]
+                                    exit_px = h["price"]
+                                    pnl = h["pnl"]
+                                else:
+                                    exit_px = t.get("latest_price", entry)
+                                    pnl = (exit_px - entry) * shares
+                                result = "利確" if status == "HIT_TP" else "損切"
+                            else:
+                                exit_px = t.get("latest_price", entry)
+                                pnl = (exit_px - entry) * shares
+                                result = "未決済 (大引け)"
                                 
-                            pnl = (latest - entry) * shares
                             total_pnl += pnl
                             lines.extend([
                                 f"{i}. {code} {name} - {result}",
-                                f"   エントリー: {entry:,.1f}円 -> 決済/現在値: {latest:,.1f}円",
+                                f"   エントリー: {entry:,.1f}円 -> 決済/現在値: {exit_px:,.1f}円",
                                 f"   数量: {shares:,}株",
                                 f"   損益: {pnl:+,.0f}円",
                                 ""
