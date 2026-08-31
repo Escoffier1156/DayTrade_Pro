@@ -439,10 +439,9 @@ def run_daily_report():
     targets = data.get("targets", [])
     
     history_map = {}
-    history_file = ROOT_DIR / "data" / "trade_history.json"
-    if history_file.exists():
+    if HISTORY_FILE.exists():
         try:
-            history_data = json.loads(history_file.read_text(encoding="utf-8"))
+            history_data = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
             for h in history_data:
                 if h.get("date") == target_date:
                     history_map[str(h.get("ticker"))] = h
