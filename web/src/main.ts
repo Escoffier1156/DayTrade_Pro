@@ -54,11 +54,33 @@ cmTp.addEventListener('click', () => handleManualAction('TP'));
 cmSl.addEventListener('click', () => handleManualAction('SL'));
 
 const btnNotifyReport = document.getElementById('btn-notify-report');
-if (btnNotifyReport) {
+const reportModal = document.getElementById('report-modal');
+const previewText = document.getElementById('report-preview-text');
+const btnCancelReport = document.getElementById('btn-cancel-report');
+const btnConfirmReport = document.getElementById('btn-confirm-report');
+
+if (btnNotifyReport && reportModal && previewText && btnCancelReport && btnConfirmReport) {
   btnNotifyReport.addEventListener('click', async () => {
-    const isOk = confirm('本日の最終損益レポートをSlackに通知しますか？');
-    if (!isOk) return;
-    
+    try {
+      const res = await fetch('/api/preview_report?k=l5cL0jRp9Yzcj_dRutcc43zNmZG0oOFb');
+      if (res.ok) {
+        const data = await res.json();
+        previewText.textContent = data.text || 'No text';
+        reportModal.style.display = 'flex';
+      } else {
+        alert('プレビューの取得に失敗しました。');
+      }
+    } catch (e) {
+      alert('通信エラー: ' + e);
+    }
+  });
+
+  btnCancelReport.addEventListener('click', () => {
+    reportModal.style.display = 'none';
+  });
+
+  btnConfirmReport.addEventListener('click', async () => {
+    reportModal.style.display = 'none';
     try {
       const res = await fetch('/api/report?k=l5cL0jRp9Yzcj_dRutcc43zNmZG0oOFb', { method: 'POST' });
       if (res.ok) {

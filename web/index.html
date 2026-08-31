@@ -13,6 +13,18 @@
   <div id="market-closed-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: #0b0f19; z-index: 9999; justify-content: center; align-items: center; color: white; font-family: 'JetBrains Mono', monospace;">
     <h1 style="font-size: 5rem; letter-spacing: 0.1em; color: #4b5563; text-shadow: 0 0 20px rgba(75, 85, 99, 0.5);">MARKET CLOSED</h1>
   </div>
+  
+  <div id="report-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0,0,0,0.8); z-index: 10000; justify-content: center; align-items: center; font-family: 'JetBrains Mono', monospace;">
+    <div style="background-color: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid var(--text-amber); min-width: 400px; max-width: 600px;">
+      <h2 style="color: var(--text-amber); margin-top: 0;">レポート送信プレビュー</h2>
+      <pre id="report-preview-text" style="background-color: #0f172a; padding: 15px; border-radius: 5px; color: #e2e8f0; white-space: pre-wrap; font-size: 13px; max-height: 60vh; overflow-y: auto;"></pre>
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px;">
+        <button id="btn-cancel-report" class="action-btn" style="background-color: transparent; color: #9ca3af; border-color: #9ca3af;">キャンセル</button>
+        <button id="btn-confirm-report" class="action-btn" style="background-color: var(--text-green); color: black; border-color: var(--text-green);">この内容で送信</button>
+      </div>
+    </div>
+  </div>
+
   <div class="terminal-container">
     <!-- Header -->
     <header class="terminal-header">

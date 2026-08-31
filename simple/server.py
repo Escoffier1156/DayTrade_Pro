@@ -67,7 +67,57 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
             return
-        
+        if parsed.path == "/api/preview_report":
+            if qs.get("k", [""])[0] != WEB_TOKEN:
+                self.send_error(403, "Forbidden")
+                return
+                
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            
+            try:
+                if not TARGETS_FILE.exists():
+                    text = "No targets file found."
+                else:
+                    data = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
+                    target_date = data.get("date")
+                    targets = data.get("targets", [])
+                    total_pnl = 0
+                    lines = [f"【本日の運用成績レポート】 ({target_date})", "---"]
+                    
+                    if not targets:
+                        lines.append("本日の取引対象銘柄はありませんでした。")
+                    else:
+                        for i, t in enumerate(targets, 1):
+                            code, name, status, entry, shares = t["code"], t["name"], t["status"], t["entry_price"], t["shares"]
+                            latest = t.get("latest_price", entry)
+                            
+                            if status == "HIT_TP": result = "利確"
+                            elif status == "HIT_SL": result = "損切"
+                            else: result = "未決済 (大引け)"
+                                
+                            pnl = (latest - entry) * shares
+                            total_pnl += pnl
+                            lines.extend([
+                                f"{i}. {code} {name} - {result}",
+                                f"   エントリー: {entry:,.1f}円 -> 決済/現在値: {latest:,.1f}円",
+                                f"   数量: {shares:,}株",
+                                f"   損益: {pnl:+,.0f}円",
+                                ""
+                            ])
+                            
+                        lines.append("---")
+                        lines.append(f"本日の合計損益: {total_pnl:+,.0f}円")
+                        
+                    text = "\n".join(lines)
+                    
+                self.wfile.write(json.dumps({"text": text}).encode("utf-8"))
+            except Exception as e:
+                self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
+            return
+            
         # Serve static files under web/dist/ but add no-cache headers for html
         path = self.translate_path(self.path)
         if path.endswith(".html") or self.path == "/":
