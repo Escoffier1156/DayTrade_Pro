@@ -319,7 +319,10 @@ def fetch_bulk_prices(targets: list, cookie: str) -> dict:
     for t in targets:
         code = t["code"]
         url = f"https://kabutan.jp/stock/?code={code}"
-        req = urllib.request.Request(url, headers={"User-Agent": UA})
+        headers = {"User-Agent": UA}
+        if cookie:
+            headers["Cookie"] = cookie
+        req = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=5) as r:
                 html = r.read().decode("utf-8", "replace")
