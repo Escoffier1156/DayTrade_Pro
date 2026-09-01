@@ -401,22 +401,11 @@ def run_intraday_monitor(iteration_count: int):
                     slack_post(f"[利確到達] {code} {t['name']}\n到達時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定利益: +{pnl:,.0f} 円")
                     print(f"{code} HIT TP! {px}")
                 elif px <= stop_px:
-                    now_time = _dt.datetime.now()
-                    time_hm = now_time.hour * 100 + now_time.minute
-                    
-                    if time_hm < 945:
-                        if not t.get("sl_warned"):
-                            now_str = now_time.strftime('%H:%M:%S')
-                            slack_post(f"[損切警告] {code} {t['name']}\n到達時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n現在値: {px:,.1f} 円\n損切ライン ({stop_px:,.1f} 円) を下回りました。\n09:45まで様子見を継続します。")
-                            t["sl_warned"] = True
-                            print(f"{code} SL Warning triggered before 9:45.")
-                    else:
-                        t["status"] = "HIT_SL"
-                        pnl = (px - entry_px) * t["shares"]
-                        now_str = now_time.strftime('%H:%M:%S')
-                        record_trade(code, t['name'], "SELL(SL)", t["shares"], px, pnl)
-                        slack_post(f"[損切確定] {code} {t['name']}\n到達時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定損失: {pnl:,.0f} 円")
-                        print(f"{code} HIT SL! {px}")
+                    if not t.get("sl_warned"):
+                        now_str = _dt.datetime.now().strftime('%H:%M:%S')
+                        slack_post(f"[損切アラート] {code} {t['name']}\n到達時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n現在値: {px:,.1f} 円\n損切ライン ({stop_px:,.1f} 円) を下回りました。\n※自動決済は停止中です。Web画面から手動で判断してください。")
+                        t["sl_warned"] = True
+                        print(f"{code} SL Alert triggered (Notification only).")
                 
         if updated:
             with open(TARGETS_FILE, "w", encoding="utf-8") as f:
