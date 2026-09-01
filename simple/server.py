@@ -174,38 +174,16 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
                     self.send_error(400, "Bad Request")
                     return
                     
-                if action == "CANCEL_TP":
-                    if TARGETS_FILE.exists():
-                        data = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
-                        for t in data.get("targets", []):
-                            if t["code"] == str(ticker) and t["status"] == "HIT_TP":
-                                t["status"] = "OPEN"
-                                if "tp_warned" in t:
-                                    del t["tp_warned"]
-                                break
-                        TARGETS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-                        
-                    history_file = ROOT / "data" / "trade_history.json"
-                    if history_file.exists():
-                        hist = json.loads(history_file.read_text(encoding="utf-8"))
-                        new_hist = []
-                        removed = False
-                        for h in hist:
-                            if not removed and h.get("ticker") == str(ticker) and h.get("side") in ["SELL(MANUAL_TP)", "SELL(TP)"] and h.get("date") == _dt.date.today().isoformat():
-                                removed = True
-                                continue
-                            new_hist.append(h)
-                        if removed:
-                            history_file.write_text(json.dumps(new_hist, ensure_ascii=False, indent=2), encoding="utf-8")
-                            
-                elif TARGETS_FILE.exists():
+                if TARGETS_FILE.exists():
                     data = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
                     updated = False
                     for t in data.get("targets", []):
-                        if t["code"] == str(ticker) and t["status"] == "OPEN":
-                            t["manual_action"] = action
-                            updated = True
-                            break
+                        if t["code"] == str(ticker):
+                            # Allow CANCEL_TP even if status is not OPEN
+                            if action == "CANCEL_TP" or t["status"] == "OPEN":
+                                t["manual_action"] = action
+                                updated = True
+                                break
                             
                     if updated:
                         TARGETS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -344,6 +344,22 @@ def record_trade(code: str, name: str, side: str, qty: int, price: float, pnl: f
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
 
+def remove_trade(code: str, side_prefix: str):
+    if not HISTORY_FILE.exists(): return
+    try: history = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+    except: return
+    new_history = []
+    removed = False
+    today = _dt.date.today().isoformat()
+    for h in history:
+        if not removed and h.get("ticker") == code and h.get("side", "").startswith(side_prefix) and h.get("date") == today:
+            removed = True
+            continue
+        new_history.append(h)
+    if removed:
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(new_history, f, ensure_ascii=False, indent=2)
+
 def run_intraday_monitor(iteration_count: int):
     if not TARGETS_FILE.exists(): return
     try: data = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
@@ -373,28 +389,39 @@ def run_intraday_monitor(iteration_count: int):
             
             updated = True
             
-            # Only trigger TP/SL if the position is currently OPEN
-            if t["status"] == "OPEN":
-                entry_px, target_px, stop_px = t["entry_price"], t["target"], t["stop"]
+            # Check for manual overrides from the UI
+            if t.get("manual_action"):
+                action = t.pop("manual_action")
+                pnl = (px - t["entry_price"]) * t["shares"] if px else 0
                 
-                # Check for manual overrides from the UI
-                if t.get("manual_action"):
-                    action = t.pop("manual_action")
-                    pnl = (px - entry_px) * t["shares"]
+                if action == "CANCEL_TP" and t["status"] == "HIT_TP":
+                    t["status"] = "OPEN"
+                    if "tp_warned" in t:
+                        del t["tp_warned"]
+                    remove_trade(code, "SELL(MANUAL_TP)")
+                    updated = True
+                    print(f"{code} CANCEL TP processed.")
+                    
+                elif t["status"] == "OPEN":
                     if action == "TP":
                         t["status"] = "HIT_TP"
                         now_str = _dt.datetime.now().strftime('%H:%M:%S')
                         record_trade(code, t['name'], "SELL(MANUAL_TP)", t["shares"], px, pnl)
-                        slack_post(f"[手動利確] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定利益: +{pnl:,.0f} 円")
+                        slack_post(f"[手動利確] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {t['entry_price']:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定利益: +{pnl:,.0f} 円")
                         print(f"{code} MANUAL TP! {px}")
+                        updated = True
                     elif action == "SL":
                         t["status"] = "HIT_SL"
                         now_str = _dt.datetime.now().strftime('%H:%M:%S')
                         record_trade(code, t['name'], "SELL(MANUAL_SL)", t["shares"], px, pnl)
-                        slack_post(f"[手動損切] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定損失: {pnl:,.0f} 円")
+                        slack_post(f"[手動損切] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {t['entry_price']:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定損失: {pnl:,.0f} 円")
                         print(f"{code} MANUAL SL! {px}")
-                    updated = True
-                    continue
+                        updated = True
+                continue
+            
+            # Only trigger TP/SL if the position is currently OPEN
+            if t["status"] == "OPEN":
+                entry_px, target_px, stop_px = t["entry_price"], t["target"], t["stop"]
                 
                 if px >= target_px:
                     if not t.get("tp_warned"):
