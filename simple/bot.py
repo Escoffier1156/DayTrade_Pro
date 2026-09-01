@@ -379,7 +379,9 @@ def run_intraday_monitor(iteration_count: int):
             if px is None: continue
                 
             t["latest_price"] = px
-            is_history_poll = (iteration_count % 4 == 0)
+            
+            # Update history (chart) every 15 seconds (real-time)
+            is_history_poll = True
             if is_history_poll:
                 t.setdefault("history", [])
                 current_ts = int(time.time())
@@ -536,8 +538,8 @@ def main():
             # [/LOCK]
                 set_last_run("screener", today_str)
                 
-            # --- 08:55 ~ 11:30, 12:30 ~ 15:30 : intraday_monitor (Intraday Monitoring) ---
-            if (855 <= time_hm < 1130) or (1230 <= time_hm <= 1530):
+            # --- 08:55 ~ 15:30 : intraday_monitor (Intraday Monitoring) ---
+            if 855 <= time_hm <= 1530:
                 if not is_monitoring:
                     print(f"[{now.strftime('%H:%M:%S')}] --- Monitoring Mode Started ---")
                     is_monitoring, iteration_count = True, 0
