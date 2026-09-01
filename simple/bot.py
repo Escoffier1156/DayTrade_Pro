@@ -397,12 +397,11 @@ def run_intraday_monitor(iteration_count: int):
                     continue
                 
                 if px >= target_px:
-                    t["status"] = "HIT_TP"
-                    pnl = (px - entry_px) * t["shares"]
-                    now_str = _dt.datetime.now().strftime('%H:%M:%S')
-                    record_trade(code, t['name'], "SELL(TP)", t["shares"], px, pnl)
-                    slack_post(f"[利確到達] {code} {t['name']}\n到達時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定利益: +{pnl:,.0f} 円")
-                    print(f"{code} HIT TP! {px}")
+                    if not t.get("tp_warned"):
+                        now_str = _dt.datetime.now().strftime('%H:%M:%S')
+                        slack_post(f"[利確アラート] {code} {t['name']}\n到達時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n現在値: {px:,.1f} 円\n利確ライン ({target_px:,.1f} 円) を上回りました。\n※自動決済は停止中です。Web画面から手動で判断してください。")
+                        t["tp_warned"] = True
+                        print(f"{code} TP Alert triggered (Notification only).")
                 elif px <= stop_px:
                     if not t.get("sl_warned"):
                         now_str = _dt.datetime.now().strftime('%H:%M:%S')
