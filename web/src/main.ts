@@ -16,6 +16,7 @@ const panelUnrlz = document.getElementById('panel-unrlz')!;
 const contextMenu = document.getElementById('context-menu')!;
 const cmTp = document.getElementById('cm-tp')!;
 const cmSl = document.getElementById('cm-sl')!;
+const cmCancelTp = document.getElementById('cm-cancel-tp')!;
 
 // State
 let targetsData: Target[] = [];
@@ -29,10 +30,15 @@ document.addEventListener('click', () => {
   contextMenu.style.display = 'none';
 });
 
-async function handleManualAction(action: 'TP' | 'SL') {
+async function handleManualAction(action: 'TP' | 'SL' | 'CANCEL_TP') {
   if (!contextMenuTarget) return;
-  const isOk = confirm(`本当に ${contextMenuTarget} を手動${action === 'TP' ? '利確' : '損切'}しますか？`);
-  if (!isOk) return;
+  
+  let msg = '';
+  if (action === 'TP') msg = `【${contextMenuTarget}】の利確を実行しますか？`;
+  else if (action === 'SL') msg = `【${contextMenuTarget}】の損切を実行しますか？`;
+  else if (action === 'CANCEL_TP') msg = `【${contextMenuTarget}】の利確を取り消してOPENに戻しますか？`;
+  
+  if (!confirm(msg)) return;
   
   try {
     const res = await fetch('/api/action?k=l5cL0jRp9Yzcj_dRutcc43zNmZG0oOFb', {
@@ -41,7 +47,7 @@ async function handleManualAction(action: 'TP' | 'SL') {
       body: JSON.stringify({ ticker: contextMenuTarget, action })
     });
     if (res.ok) {
-      alert('手動決済リクエストを送信しました！(数秒後に反映されます)');
+      alert('リクエストを送信しました！(数秒後に反映されます)');
     } else {
       alert('エラーが発生しました。');
     }
@@ -52,6 +58,7 @@ async function handleManualAction(action: 'TP' | 'SL') {
 
 cmTp.addEventListener('click', () => handleManualAction('TP'));
 cmSl.addEventListener('click', () => handleManualAction('SL'));
+cmCancelTp.addEventListener('click', () => handleManualAction('CANCEL_TP'));
 
 const btnNotifyReport = document.getElementById('btn-notify-report');
 const reportModal = document.getElementById('report-modal');
