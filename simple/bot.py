@@ -451,52 +451,75 @@ def run_intraday_monitor(iteration_count: int):
 # daily_report (Daily Report)
 # =========================================================
 def run_daily_report():
-    if not TARGETS_FILE.exists(): return
-    try: data = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
-    except: return
-        
-    target_date = data.get("date")
-    targets = data.get("targets", [])
+    import datetime
+    target_date = datetime.date.today().isoformat()
+    lines = [f"【本日の運用成績レポート】 ({target_date})", "---"]
+    total_realized_pnl = 0
+    total_unrealized_pnl = 0
     
-    history_map = {}
+    history_data = []
     if HISTORY_FILE.exists():
         try:
-            history_data = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
-            for h in history_data:
-                if h.get("date") == target_date:
-                    history_map[str(h.get("ticker"))] = h
+            all_history = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+            history_data = [h for h in all_history if h.get("date") == target_date]
         except Exception:
             pass
-
-    total_pnl = 0
-    lines = [f"【本日の運用成績レポート】 ({target_date})", "---"]
     
-    if not targets:
-        lines.append("本日の取引対象銘柄はありませんでした。")
+    lines.append("■ 決済済 (実現損益)")
+    if not history_data:
+        lines.append("本日の決済済み銘柄はありません。")
     else:
-        for i, t in enumerate(targets, 1):
-            code, name, status, entry, shares = t["code"], t["name"], t["status"], t["entry_price"], t["shares"]
-            
-            if status in ["HIT_TP", "HIT_SL"]:
-                if code in history_map:
-                    h = history_map[code]
-                    exit_px = h["price"]
-                    pnl = h["pnl"]
-                else:
-                    exit_px = t.get("latest_price", entry)
-                    pnl = (exit_px - entry) * shares
-                result = "利確" if status == "HIT_TP" else "損切"
+        for i, h in enumerate(history_data, 1):
+            side_str = str(h.get("side", ""))
+            if "TP" in side_str:
+                result = "利確"
+            elif "SL" in side_str:
+                result = "損切"
+            elif "PARTIAL" in side_str:
+                result = "部分決済"
             else:
-                exit_px = t.get("latest_price", entry)
-                pnl = (exit_px - entry) * shares
-                result = "未決済 (大引け)"
-                
-            total_pnl += pnl
-            lines.extend([f"{i}. {code} {name} - {result}", f"   エントリー: {entry:,.1f}円 -> 決済/現在値: {exit_px:,.1f}円", f"   数量: {shares:,}株", f"   損益: {pnl:+,.0f}円", ""])
-            
-        lines.append("---")
-        lines.append(f"本日の合計損益: {total_pnl:+,.0f}円")
-        
+                result = side_str
+            pnl = float(h.get("pnl", 0))
+            total_realized_pnl += pnl
+            lines.extend([
+                f"{i}. {h.get('time', '')} {h.get('ticker', '')} {h.get('name', '')} - {result}",
+                f"   数量: {h.get('qty', 0):,}株 / 決済値: {h.get('price', 0):,.1f}円",
+                f"   損益: {pnl:+,.0f}円"
+            ])
+    
+    lines.append("")
+    lines.append("■ 保有中 (含み損益)")
+    
+    targets_data = []
+    if TARGETS_FILE.exists():
+        try:
+            tdata = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
+            if tdata.get("date") == target_date:
+                targets_data = tdata.get("targets", [])
+        except Exception:
+            pass
+    
+    open_targets = [t for t in targets_data if t.get("status") == "OPEN"]
+    
+    if not open_targets:
+        lines.append("現在保有中の銘柄はありません。")
+    else:
+        for i, t in enumerate(open_targets, 1):
+            code, name, entry, shares = t.get("code"), t.get("name"), float(t.get("entry_price", 0)), int(t.get("shares", 0))
+            current_px = float(t.get("latest_price", entry))
+            pnl = (current_px - entry) * shares
+            total_unrealized_pnl += pnl
+            lines.extend([
+                f"{i}. {code} {name}",
+                f"   数量: {shares:,}株 / エントリー: {entry:,.1f}円 -> 現在値: {current_px:,.1f}円",
+                f"   含み損益: {pnl:+,.0f}円"
+            ])
+    
+    lines.append("---")
+    lines.append("【本日の合計】")
+    lines.append(f"実現損益: {total_realized_pnl:+,.0f}円")
+    lines.append(f"含み損益: {total_unrealized_pnl:+,.0f}円")
+    
     text = "\n".join(lines)
     slack_post(text)
     print("Daily report sent.")
