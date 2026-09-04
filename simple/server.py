@@ -8,6 +8,10 @@ import http.server
 import socketserver
 import json
 import urllib.parse
+import urllib.request
+import re
+import subprocess
+import datetime
 from pathlib import Path
 
 PORT = 8787
@@ -15,11 +19,27 @@ ROOT = Path(__file__).resolve().parent.parent
 DIST_DIR = ROOT / "web" / "dist"
 TARGETS_FILE = ROOT / "data" / "today_targets.json"
 HISTORY_FILE = ROOT / "data" / "trade_history.json"
+
+def record_trade(code: str, name: str, side: str, qty: int, price: float, pnl: float):
+    trade = {"date": datetime.date.today().isoformat(), "time": datetime.datetime.now().strftime("%H:%M:%S"), "ticker": code, "name": name, "side": side, "qty": qty, "price": price, "pnl": pnl}
+    history = []
+    if HISTORY_FILE.exists():
+        try: history = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+        except json.JSONDecodeError: pass
+    history.append(trade)
+    HISTORY_FILE.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
+
 WEB_TOKEN = "l5cL0jRp9Yzcj_dRutcc43zNmZG0oOFb"
 
 class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(DIST_DIR), **kwargs)
+
+    def send_custom_error(self, code, message):
+        self.send_response(code)
+        self.send_header('Content-Type', 'text/plain; charset=utf-8')
+        self.end_headers()
+        self.wfile.write(message.encode('utf-8'))
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -174,6 +194,138 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         qs = urllib.parse.parse_qs(parsed.query)
         
+        if parsed.path == "/api/add_target":
+            if qs.get("k", [""])[0] != WEB_TOKEN:
+                self.send_custom_error(403, "Forbidden")
+                return
+            
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            
+            try:
+                payload = json.loads(post_data.decode('utf-8'))
+                code = payload.get("code")
+                if not code:
+                    self.send_custom_error(400, "Bad Request: code missing")
+                    return
+                
+                
+                cookie = ""
+                secrets_path = ROOT / "config" / "secrets.env"
+                if secrets_path.exists():
+                    m = re.search(r'KABUTAN_COOKIE=(.+)', secrets_path.read_text(encoding="utf-8"))
+                    if m: cookie = m.group(1).strip()
+                    
+                url = f"https://kabutan.jp/stock/?code={code}"
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cookie': f"kabutan={cookie}" if cookie else ""})
+                
+                try:
+                    html = urllib.request.urlopen(req).read().decode('utf-8')
+                    m = re.search(r'<span class=\"kabuka\">([\d,.]+)円</span>', html)
+                    m_name = re.search(r'<title>(.*?)【', html)
+                    m_sector = re.search(r'<a href=\"/category/\?industry=.*?\">(.*?)</a>', html)
+                    
+                    if not m:
+                        self.send_custom_error(404, "Stock not found on Kabutan")
+                        return
+                        
+                    px = float(m.group(1).replace(',',''))
+                    name = m_name.group(1).strip() if m_name else "Unknown"
+                    sector = m_sector.group(1).strip() if m_sector else "Unknown"
+                    
+                    TP_PCT = 1.5
+                    SL_PCT = 2.0
+                    subprocess.run(["systemctl", "--user", "stop", "daytrade-monitor"])
+                    
+                    data = {"targets": []}
+                    if TARGETS_FILE.exists():
+                        data = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
+                        
+                    # Avoid duplicates
+                    for t in data.get("targets", []):
+                        if t.get("code") == code and t.get("status") == "OPEN":
+                            subprocess.run(["systemctl", "--user", "start", "daytrade-monitor"])
+                            self.send_custom_error(400, "Stock already in OPEN targets")
+                            return
+                            
+                    open_targets = [t for t in data.get("targets", []) if t.get("status") == "OPEN"]
+                    
+                    target_px = px * (1 + TP_PCT / 100)
+                    stop_px = px * (1 - SL_PCT / 100)
+                    
+                    new_target = {
+                        "code": code,
+                        "name": name,
+                        "sector": sector,
+                        "entry_price": px,
+                        "shares": 0,
+                        "stop": stop_px,
+                        "target": target_px,
+                        "status": "OPEN",
+                        "latest_price": px,
+                        "history": []
+                    }
+                    
+                    all_targets = open_targets + [new_target]
+                    
+                    closed_cost = sum(t.get("entry_price", 0) * t.get("shares", 0) for t in data.get("targets", []) if t.get("status") != "OPEN")
+                    
+                    # 1. Base allocation of 100 shares
+                    base_cost = closed_cost
+                    for t in all_targets:
+                        current_px = t.get("latest_price", t.get("entry_price"))
+                        base_cost += current_px * 100
+                        t["new_shares"] = 100
+                        
+                    if base_cost > 10_000_000:
+                        subprocess.run(["systemctl", "--user", "start", "daytrade-monitor"])
+                        self.send_custom_error(400, f"本日の残余資金枠が足りません（決済済み銘柄も拘束されます）。他の銘柄を削除して枠を空けてください。")
+                        return
+                        
+                    # 2. Distribute remaining capital
+                    remaining = 10_000_000 - base_cost
+                    while remaining > 0:
+                        candidates = []
+                        for t in all_targets:
+                            current_px = t.get("latest_price", t.get("entry_price"))
+                            if current_px * 100 <= remaining:
+                                candidates.append(t)
+                        if not candidates:
+                            break
+                            
+                        best = min(candidates, key=lambda t: t.get("latest_price", t.get("entry_price")) * t["new_shares"])
+                        current_px = best.get("latest_price", best.get("entry_price"))
+                        best["new_shares"] += 100
+                        remaining -= current_px * 100
+                        
+                    # 3. Apply rebalancing to existing targets
+                    for t in open_targets:
+                        if t["new_shares"] < t["shares"]:
+                            shares_to_sell = t["shares"] - t["new_shares"]
+                            current_px = t.get("latest_price", t.get("entry_price"))
+                            pnl = (current_px - t["entry_price"]) * shares_to_sell
+                            record_trade(t["code"], t["name"], "SELL(REBALANCE)", shares_to_sell, current_px, pnl)
+                        t["shares"] = t.pop("new_shares")
+                        
+                    # 4. Finalize new target
+                    new_target["shares"] = new_target.pop("new_shares")
+                    data.setdefault("targets", []).append(new_target)
+                    TARGETS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+                    
+                    subprocess.run(["systemctl", "--user", "start", "daytrade-monitor"])
+                    
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "success", "added": new_target}, ensure_ascii=False).encode('utf-8'))
+                    return
+                except Exception as e:
+                    self.send_custom_error(500, f"Scrape Error: {str(e)}")
+                    return
+            except Exception as e:
+                self.send_custom_error(500, f"Internal Error: {str(e)}")
+                return
+
         if parsed.path == "/api/action":
             if qs.get("k", [""])[0] != WEB_TOKEN:
                 self.send_error(403, "Forbidden")
@@ -187,23 +339,32 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
                 ticker = payload.get("ticker")
                 action = payload.get("action")
                 
-                if not ticker or action not in ["TP", "SL", "CANCEL_TP"]:
+                if not ticker or action not in ["TP", "SL", "CANCEL_TP", "REMOVE"]:
                     self.send_error(400, "Bad Request")
                     return
                     
                 if TARGETS_FILE.exists():
-                    data = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
-                    updated = False
-                    for t in data.get("targets", []):
-                        if t["code"] == str(ticker):
-                            # Allow CANCEL_TP even if status is not OPEN
-                            if action == "CANCEL_TP" or t["status"] == "OPEN":
-                                t["manual_action"] = action
-                                updated = True
-                                break
-                            
-                    if updated:
-                        TARGETS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+                    if action == "REMOVE":
+                        subprocess.run(["systemctl", "--user", "stop", "daytrade-monitor"])
+                        data = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
+                        original_len = len(data.get("targets", []))
+                        data["targets"] = [t for t in data.get("targets", []) if t["code"] != str(ticker)]
+                        if len(data["targets"]) < original_len:
+                            TARGETS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+                        subprocess.run(["systemctl", "--user", "start", "daytrade-monitor"])
+                    else:
+                        data = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
+                        updated = False
+                        for t in data.get("targets", []):
+                            if t["code"] == str(ticker):
+                                # Allow CANCEL_TP even if status is not OPEN
+                                if action == "CANCEL_TP" or t["status"] == "OPEN":
+                                    t["manual_action"] = action
+                                    updated = True
+                                    break
+                                
+                        if updated:
+                            TARGETS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
                         
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")

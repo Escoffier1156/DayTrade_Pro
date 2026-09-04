@@ -17,6 +17,7 @@ const contextMenu = document.getElementById('context-menu')!;
 const cmTp = document.getElementById('cm-tp')!;
 const cmSl = document.getElementById('cm-sl')!;
 const cmCancelTp = document.getElementById('cm-cancel-tp')!;
+const cmRemove = document.getElementById('cm-remove')!;
 
 // State
 let targetsData: Target[] = [];
@@ -30,13 +31,14 @@ document.addEventListener('click', () => {
   contextMenu.style.display = 'none';
 });
 
-async function handleManualAction(action: 'TP' | 'SL' | 'CANCEL_TP') {
+async function handleManualAction(action: 'TP' | 'SL' | 'CANCEL_TP' | 'REMOVE') {
   if (!contextMenuTarget) return;
   
   let msg = '';
   if (action === 'TP') msg = `【${contextMenuTarget}】の利確を実行しますか？`;
   else if (action === 'SL') msg = `【${contextMenuTarget}】の損切を実行しますか？`;
   else if (action === 'CANCEL_TP') msg = `【${contextMenuTarget}】の利確を取り消してOPENに戻しますか？`;
+  else if (action === 'REMOVE') msg = `【${contextMenuTarget}】を監視リストから完全に削除しますか？`;
   
   if (!confirm(msg)) return;
   
@@ -59,6 +61,7 @@ async function handleManualAction(action: 'TP' | 'SL' | 'CANCEL_TP') {
 cmTp.addEventListener('click', () => handleManualAction('TP'));
 cmSl.addEventListener('click', () => handleManualAction('SL'));
 cmCancelTp.addEventListener('click', () => handleManualAction('CANCEL_TP'));
+cmRemove.addEventListener('click', () => handleManualAction('REMOVE'));
 
 const btnNotifyReport = document.getElementById('btn-notify-report');
 const reportModal = document.getElementById('report-modal');
@@ -483,6 +486,7 @@ async function sync() {
     renderHistory();
     renderStats();
     updateUnrealizedPnL();
+    renderTickerTape();
     
   } catch (err) {
     console.error("Failed to sync data:", err);
@@ -491,3 +495,65 @@ async function sync() {
 
 sync();
 setInterval(sync, 15000);
+
+// --- Add Symbol Logic ---
+const symbolInput = document.getElementById('symbol-input') as HTMLInputElement | null;
+const btnAddSymbol = document.getElementById('btn-add-symbol') as HTMLButtonElement | null;
+
+if (symbolInput && btnAddSymbol) {
+  btnAddSymbol.addEventListener('click', async () => {
+    const code = symbolInput.value.trim();
+    if (!code || !/^[0-9A-Za-z]{4}$/.test(code)) {
+      alert("正しい4桁の証券コード（半角英数字）を入力してください");
+      return;
+    }
+    
+    btnAddSymbol.textContent = "追加中...";
+    btnAddSymbol.disabled = true;
+    
+    try {
+      // Assuming WEB_TOKEN is available globally or we can parse it from URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('k') || '';
+      
+      const res = await fetch(`/api/add_target?k=${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+      
+      if (res.ok) {
+        alert(`${code} の追加が完了しました`);
+        symbolInput.value = "";
+      } else {
+        const err = await res.text();
+        alert(`追加に失敗しました: ${err}`);
+      }
+    } catch (e) {
+      alert("エラーが発生しました: " + e);
+    } finally {
+      btnAddSymbol.textContent = "追加";
+      btnAddSymbol.disabled = false;
+    }
+  });
+}
+
+function renderTickerTape() {
+  const container = document.getElementById('ticker-tape-content');
+  if (!container) return;
+
+  const items = targetsData.map(t => {
+    const isUp = t.latest_price >= t.entry_price;
+    const icon = isUp ? '🟢' : '🔴';
+    const colorClass = isUp ? 'ticker-up' : 'ticker-down';
+    const pct = ((t.latest_price - t.entry_price) / t.entry_price * 100).toFixed(2);
+    const sign = isUp ? '+' : '';
+    
+    return `<span class="ticker-item ${colorClass}">${icon} ${t.code} ${t.name}: &yen;${t.latest_price.toLocaleString()} (${sign}${pct}%)</span>`;
+  });
+
+  // Duplicate the items once to ensure smooth continuous scrolling if needed,
+  // or just append them all. Since it's CSS animation from 100% to -100%, 
+  // one long string is usually enough.
+  container.innerHTML = items.join(' <span style="color:#475569; margin: 0 15px;">|</span> ');
+}
