@@ -144,15 +144,6 @@ function updateTime() {
   const hm = now.getHours() * 100 + now.getMinutes();
   const isClosedDay = isMarketClosedDay(now);
   const badge = document.getElementById('live-badge');
-  const overlay = document.getElementById('market-closed-overlay');
-  
-  if (overlay) {
-    if (isClosedDay) {
-      overlay.style.display = 'flex';
-    } else {
-      overlay.style.display = 'none';
-    }
-  }
   
   if (badge) {
     if (isClosedDay || hm >= 1530 || hm < 900) {

@@ -36,15 +36,7 @@ AVG_WINDOW = 20
 
 # [LOCK: strict]
 # Kabutan Screener
-TARGET_URLS = [
-    "https://kabutan.jp/warning/?mode=2_9",
-    "https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=-1&dispmode=normal&stc=&stm=0&page=2",
-    "https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=-1&dispmode=normal&stc=&stm=0&page=3",
-    "https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=-1&dispmode=normal&stc=&stm=0&page=4",
-    "https://kabutan.jp/warning/?mode=2_9&capitalization=3&dispmode=normal",
-    "https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=3&dispmode=normal&stc=&stm=0&page=2",
-    "https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=3&dispmode=normal&stc=&stm=0&page=3"
-]
+TARGET_URL = "https://kabutan.jp/stock/?code=0000"
 # [/LOCK]
 MIN_AVG_VOLUME = 400_000
 MIN_AVG_TURNOVER = 3_000_000_000
@@ -225,22 +217,19 @@ def parse_nikkei(doc: str) -> dict:
     return {}
 
 def parse_ranking(doc: str) -> list[dict]:
-    m = _TABLE.search(doc)
+    m = re.search(r'<h2 class="title2">寄与度上位10</h2>.*?<tbody>(.*?)</tbody>', doc, re.S)
     if not m: return []
-    trs = _TR.findall(m.group(1))
-    if not trs: return []
-    
+    trs = re.findall(r'<tr>(.*?)</tr>', m.group(1), re.S)
     rows = []
-    for tr in trs[1:]:
-        c = [_text(x) for x in _CELL.findall(tr)]
-        if len(c) < 4: continue
-        pi = next((i for i, x in enumerate(c) if x.endswith("%")), None)
-        if pi is None or pi < 3: continue
-            
-        pct = _num(c[pi].rstrip(" %"))
-        price = next((_num(c[j]) for j in range(pi - 2, 2, -1) if _num(c[j]) is not None), None)
-        if price is not None:
-            rows.append({"code": c[0], "name": c[1], "price": price, "change_pct": pct})
+    for tr in trs:
+        code_name = re.search(r'<a href="/stock/\?code=(\w+)">([^<]+)</a>', tr)
+        price_m = re.findall(r'<td>([\d,.]+)</td>', tr)
+        pct_m = re.search(r'<td class="w50">.*?([+-][\d.]+)</span>%', tr)
+        if code_name and len(price_m) >= 1 and pct_m:
+            code, name = code_name.groups()
+            price = float(price_m[0].replace(",", ""))
+            pct = float(pct_m.group(1))
+            rows.append({"code": code, "name": name, "price": price, "change_pct": pct})
     return rows
 
 def run_morning_screener():
@@ -250,17 +239,15 @@ def run_morning_screener():
         return
         
     universe = json.loads(UNIVERSE_FILE.read_text(encoding="utf-8"))
-    print("Scraping today's active stocks from Kabutan...")
-    all_rows = []
+    print("Scraping Nikkei Average top contributors...")
     nikkei = {}
-    for i, url in enumerate(TARGET_URLS):
-        try:
-            doc = fetch_page(url, cookie)
-            if i == 0: nikkei = parse_nikkei(doc)
-            page_rows = parse_ranking(doc)
-            all_rows.extend(page_rows)
-        except Exception as e:
-            print(f"  URL {url} Fetch failed: {e}")
+    all_rows = []
+    try:
+        doc = fetch_page(TARGET_URL, cookie)
+        nikkei = parse_nikkei(doc)
+        all_rows = parse_ranking(doc)
+    except Exception as e:
+        print(f"  URL {TARGET_URL} Fetch failed: {e}")
             
     n_pct = nikkei.get("pct", 0)
     if n_pct >= NIKKEI_STRONG: pick_count, regime = 5, "Bullish"
@@ -273,26 +260,52 @@ def run_morning_screener():
     filtered = []
     for r in all_rows:
         u = universe.get(r["code"])
-        # 硬い銘柄: Turnover >= 3 billion, Price >= 500, 0.0% <= change_pct < +5.0%
-        if u and u["avg_volume"] >= MIN_AVG_VOLUME and u["avg_turnover"] >= MIN_AVG_TURNOVER and r.get("price", 0) >= 500:
-            cp = r.get("change_pct", 0)
-            if cp is not None and 0.0 <= cp < 5.0:
-                r.update({"avg_volume": u["avg_volume"], "avg_turnover": u["avg_turnover"], "sector": u["sector"]})
-                filtered.append(r)
-            
-    filtered.sort(key=lambda x: -(x["change_pct"] or -99))
+        sector = u["sector"] if u else "日経225"
+        r["sector"] = sector
+        filtered.append(r)
     # [/LOCK]
+    filtered.sort(key=lambda x: -(x.get("change_pct") or -99))
     targets = []
     lines = [
-        f"【買い付け枠】地合い: {regime} (日経 {n_pct:+.2f}%) -> 最大 {pick_count} 銘柄を探索",
-        f"条件: 出来高{MIN_AVG_VOLUME//10000}万株以上, 売買代金{MIN_AVG_TURNOVER//100000000}億円以上\n"
+        f"【買い付け枠】地合い: {regime} (日経 {n_pct:+.2f}%) -> 少数精鋭(最大3銘柄)を抽出\n",
+        f"※値がさ株（30,000円以上）を優先して1銘柄組み込みます\n"
     ]
     
-    for i, r in enumerate(filtered[:pick_count], 1):
-        px = r["price"]
-        shares = int((TOTAL_CAPITAL / pick_count) // px // LOT) * LOT
-        if shares == 0: continue
+    high_priced_cands = [r for r in filtered if r.get("price", 0) >= 30000]
+    normal_cands = [r for r in filtered if r.get("price", 0) < 30000]
+    
+    accepted = []
+    base_cost = 0
+    
+    if high_priced_cands:
+        h = high_priced_cands[0]
+        base_cost += h["price"] * LOT
+        h["new_shares"] = LOT
+        accepted.append(h)
+        
+    for r in normal_cands:
+        if len(accepted) >= 3:
+            break
+        px = r.get("price", 0)
+        if px > 0 and base_cost + px * LOT <= TOTAL_CAPITAL:
+            base_cost += px * LOT
+            r["new_shares"] = LOT
+            accepted.append(r)
             
+    # 2. Distribute remaining capital dynamically to balance the position size
+    remaining = TOTAL_CAPITAL - base_cost
+    while remaining > 0:
+        candidates = [r for r in accepted if r["price"] * LOT <= remaining]
+        if not candidates:
+            break
+        best = min(candidates, key=lambda r: r["price"] * r["new_shares"])
+        best["new_shares"] += LOT
+        remaining -= best["price"] * LOT
+    
+    for i, r in enumerate(accepted, 1):
+        px = r["price"]
+        shares = r.pop("new_shares")
+        
         stop_px = px * (1 - SL_PCT / 100)
         target_px = px * (1 + TP_PCT / 100)
         
@@ -380,14 +393,15 @@ def run_intraday_monitor(iteration_count: int):
                 
             t["latest_price"] = px
             
-            # Update history (chart) every 15 seconds (real-time)
-            is_history_poll = True
-            if is_history_poll:
-                t.setdefault("history", [])
-                current_ts = int(time.time())
-                if t["history"] and t["history"][-1]["time"] >= current_ts:
-                    current_ts = t["history"][-1]["time"] + 1
-                t["history"].append({"time": current_ts, "value": px})
+            # Update history (chart) every 1 minute, but keep the latest value real-time (15s)
+            t.setdefault("history", [])
+            now_dt = _dt.datetime.now()
+            current_minute_ts = int(now_dt.replace(second=0, microsecond=0).timestamp())
+            
+            if not t["history"] or t["history"][-1]["time"] < current_minute_ts:
+                t["history"].append({"time": current_minute_ts, "value": px})
+            else:
+                t["history"][-1]["value"] = px
             
             updated = True
             
@@ -436,6 +450,7 @@ def run_intraday_monitor(iteration_count: int):
                         now_str = _dt.datetime.now().strftime('%H:%M:%S')
                         slack_post(f"[損切アラート] {code} {t['name']}\n到達時間: {now_str}\n買値(エントリー): {entry_px:,.1f} 円\n現在値: {px:,.1f} 円\n損切ライン ({stop_px:,.1f} 円) を下回りました。\n※自動決済は停止中です。Web画面から手動で判断してください。")
                         t["sl_warned"] = True
+                        updated = True
                         print(f"{code} SL Alert triggered (Notification only).")
                 
         if updated:
@@ -561,6 +576,18 @@ def main():
             # [/LOCK]
                 set_last_run("screener", today_str)
                 
+            if STATE_FILE.exists():
+                try:
+                    state_data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+                    if state_data.get("trigger_report"):
+                        print(f"[{now.strftime('%H:%M:%S')}] Manual Trigger: Executing run_daily_report()")
+                        try: run_daily_report()
+                        except Exception as e: print(f"daily_report Error: {e}")
+                        state_data["trigger_report"] = False
+                        STATE_FILE.write_text(json.dumps(state_data, ensure_ascii=False, indent=2), encoding="utf-8")
+                except Exception as e:
+                    print(f"Failed to check manual triggers: {e}")
+                    
             # --- 08:55 ~ 15:30 : intraday_monitor (Intraday Monitoring) ---
             if 855 <= time_hm <= 1530:
                 if not is_monitoring:
@@ -574,17 +601,6 @@ def main():
                 if is_monitoring:
                     print(f"[{now.strftime('%H:%M:%S')}] --- Monitoring Mode Ended ---")
                     is_monitoring = False
-            if STATE_FILE.exists():
-                try:
-                    state_data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-                    if state_data.get("trigger_report"):
-                        print(f"[{now.strftime('%H:%M:%S')}] Manual Trigger: Executing run_daily_report()")
-                        try: run_daily_report()
-                        except Exception as e: print(f"daily_report Error: {e}")
-                        state_data["trigger_report"] = False
-                        STATE_FILE.write_text(json.dumps(state_data, ensure_ascii=False, indent=2), encoding="utf-8")
-                except Exception as e:
-                    print(f"Failed to check manual triggers: {e}")
             
             time.sleep(1)
             
