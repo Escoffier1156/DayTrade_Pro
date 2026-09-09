@@ -1,7 +1,7 @@
 import json
 import re
 
-har_path = "kabutan.jp_favorite_stock__Archive [26-09-08 08-50-41].har"
+har_path = "kabutan.jp_favorite_stock__Archive [26-09-09 09-00-57].har"
 with open(har_path) as f:
     har = json.load(f)
 

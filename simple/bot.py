@@ -386,6 +386,17 @@ def run_intraday_monitor(iteration_count: int):
     
     try:
         prices = fetch_bulk_prices(targets, cookie)
+        
+        # Reload TARGETS_FILE to catch any manual_action added by server.py during the network fetch
+        try:
+            latest_data = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
+            latest_targets = {t["code"]: t for t in latest_data.get("targets", [])}
+            for t in targets:
+                if t["code"] in latest_targets and "manual_action" in latest_targets[t["code"]]:
+                    t["manual_action"] = latest_targets[t["code"]]["manual_action"]
+        except Exception as e:
+            print(f"Failed to reload targets for manual_action: {e}")
+            
         for t in targets:
             code = t["code"]
             px = prices.get(code)
