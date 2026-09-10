@@ -264,25 +264,38 @@ def run_morning_screener():
         r["sector"] = sector
         filtered.append(r)
     # [/LOCK]
+    
+    boss = None
+    if all_rows:
+        if regime == "Bearish" and len(all_rows) > 10:
+            boss = all_rows[10]
+        else:
+            boss = all_rows[0]
+            
     filtered.sort(key=lambda x: -(abs(x.get("change_pct") or 0)))
     targets = []
     lines = [
         f"【買い付け枠】地合い: {regime} (日経 {n_pct:+.2f}%) -> 少数精鋭(最大3銘柄)を抽出\n",
-        f"※値がさ株（30,000円以上）を優先して1銘柄組み込みます\n"
+        f"※主役銘柄（寄与度トップ）と値がさ株を優先して組み込みます\n"
     ]
-    
-    high_priced_cands = [r for r in filtered if r.get("price", 0) >= 30000]
-    normal_cands = [r for r in filtered if r.get("price", 0) < 30000]
     
     accepted = []
     base_cost = 0
     
+    if boss:
+        base_cost += boss["price"] * LOT
+        boss["new_shares"] = LOT
+        accepted.append(boss)
+        
+    high_priced_cands = [r for r in filtered if r.get("price", 0) >= 30000 and r["code"] != (boss["code"] if boss else "")]
     if high_priced_cands:
         h = high_priced_cands[0]
-        base_cost += h["price"] * LOT
-        h["new_shares"] = LOT
-        accepted.append(h)
-        
+        if base_cost + h["price"] * LOT <= TOTAL_CAPITAL:
+            base_cost += h["price"] * LOT
+            h["new_shares"] = LOT
+            accepted.append(h)
+            
+    normal_cands = [r for r in filtered if r["code"] not in [a["code"] for a in accepted]]
     for r in normal_cands:
         if len(accepted) >= 3:
             break
