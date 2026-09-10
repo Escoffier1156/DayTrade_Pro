@@ -217,19 +217,19 @@ def parse_nikkei(doc: str) -> dict:
     return {}
 
 def parse_ranking(doc: str) -> list[dict]:
-    m = re.search(r'<h2 class="title2">寄与度上位10</h2>.*?<tbody>(.*?)</tbody>', doc, re.S)
-    if not m: return []
-    trs = re.findall(r'<tr>(.*?)</tr>', m.group(1), re.S)
+    matches = re.finditer(r'<h2 class="title2">寄与度[上下]位10</h2>.*?<tbody>(.*?)</tbody>', doc, re.S)
     rows = []
-    for tr in trs:
-        code_name = re.search(r'<a href="/stock/\?code=(\w+)">([^<]+)</a>', tr)
-        price_m = re.findall(r'<td>([\d,.]+)</td>', tr)
-        pct_m = re.search(r'<td class="w50">.*?([+-][\d.]+)</span>%', tr)
-        if code_name and len(price_m) >= 1 and pct_m:
-            code, name = code_name.groups()
-            price = float(price_m[0].replace(",", ""))
-            pct = float(pct_m.group(1))
-            rows.append({"code": code, "name": name, "price": price, "change_pct": pct})
+    for m in matches:
+        trs = re.findall(r'<tr>(.*?)</tr>', m.group(1), re.S)
+        for tr in trs:
+            code_name = re.search(r'<a href="/stock/\?code=(\w+)">([^<]+)</a>', tr)
+            price_m = re.findall(r'<td>([\d,.]+)</td>', tr)
+            pct_m = re.search(r'<td class="w50">.*?([+-][\d.]+)</span>%', tr)
+            if code_name and len(price_m) >= 1 and pct_m:
+                code, name = code_name.groups()
+                price = float(price_m[0].replace(",", ""))
+                pct = float(pct_m.group(1))
+                rows.append({"code": code, "name": name, "price": price, "change_pct": pct})
     return rows
 
 def run_morning_screener():
@@ -264,7 +264,7 @@ def run_morning_screener():
         r["sector"] = sector
         filtered.append(r)
     # [/LOCK]
-    filtered.sort(key=lambda x: -(x.get("change_pct") or -99))
+    filtered.sort(key=lambda x: -(abs(x.get("change_pct") or 0)))
     targets = []
     lines = [
         f"【買い付け枠】地合い: {regime} (日経 {n_pct:+.2f}%) -> 少数精鋭(最大3銘柄)を抽出\n",
