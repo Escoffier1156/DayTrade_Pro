@@ -44,7 +44,14 @@ TP_PCT = 1.5
 SL_PCT = 2.0
 NIKKEI_STRONG = 0.5
 NIKKEI_WEAK = -0.5
-TOTAL_CAPITAL = 10_000_000
+def get_total_capital():
+    base = 10_000_000
+    if HISTORY_FILE.exists():
+        try:
+            history = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+            base += sum(t.get("pnl", 0) for t in history)
+        except: pass
+    return base
 LOT = 100
 
 _TABLE = re.compile(r'<table class="stock_table[^"]*">(.*?)</table>', re.S)
@@ -306,15 +313,16 @@ def run_morning_screener():
     # Calculate base cost and new_shares with live prices
     base_cost = 0
     final_accepted = []
+    total_cap = get_total_capital()
     for a in accepted:
-        if base_cost + a["price"] * LOT <= TOTAL_CAPITAL:
+        if base_cost + a["price"] * LOT <= total_cap:
             base_cost += a["price"] * LOT
             a["new_shares"] = LOT
             final_accepted.append(a)
     accepted = final_accepted
             
     # 2. Distribute remaining capital dynamically to balance the position size
-    remaining = TOTAL_CAPITAL - base_cost
+    remaining = total_cap - base_cost
     while remaining > 0:
         candidates = [r for r in accepted if r["price"] * LOT <= remaining]
         if not candidates:
