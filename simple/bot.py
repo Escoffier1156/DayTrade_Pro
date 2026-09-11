@@ -217,7 +217,7 @@ def parse_nikkei(doc: str) -> dict:
     return {}
 
 def parse_ranking(doc: str) -> list[dict]:
-    matches = re.finditer(r'<h2 class="title2">寄与度[上下]位10</h2>.*?<tbody>(.*?)</tbody>', doc, re.S)
+    matches = re.finditer(r'<h2 class="title2">寄与度上位10</h2>.*?<tbody>(.*?)</tbody>', doc, re.S)
     rows = []
     for m in matches:
         trs = re.findall(r'<tr>(.*?)</tr>', m.group(1), re.S)
@@ -283,27 +283,35 @@ def run_morning_screener():
     base_cost = 0
     
     if boss:
-        base_cost += boss["price"] * LOT
-        boss["new_shares"] = LOT
         accepted.append(boss)
         
     high_priced_cands = [r for r in filtered if r.get("price", 0) >= 30000 and r["code"] != (boss["code"] if boss else "")]
     if high_priced_cands:
-        h = high_priced_cands[0]
-        if base_cost + h["price"] * LOT <= TOTAL_CAPITAL:
-            base_cost += h["price"] * LOT
-            h["new_shares"] = LOT
-            accepted.append(h)
+        accepted.append(high_priced_cands[0])
             
     normal_cands = [r for r in filtered if r["code"] not in [a["code"] for a in accepted]]
     for r in normal_cands:
         if len(accepted) >= 3:
             break
-        px = r.get("price", 0)
-        if px > 0 and base_cost + px * LOT <= TOTAL_CAPITAL:
-            base_cost += px * LOT
-            r["new_shares"] = LOT
+        if r.get("price", 0) > 0:
             accepted.append(r)
+            
+    # Fetch real-time prices since table prices are delayed
+    print("Fetching real-time prices for selected candidates...")
+    live_prices = fetch_bulk_prices(accepted, cookie)
+    for a in accepted:
+        if a["code"] in live_prices:
+            a["price"] = live_prices[a["code"]]
+            
+    # Calculate base cost and new_shares with live prices
+    base_cost = 0
+    final_accepted = []
+    for a in accepted:
+        if base_cost + a["price"] * LOT <= TOTAL_CAPITAL:
+            base_cost += a["price"] * LOT
+            a["new_shares"] = LOT
+            final_accepted.append(a)
+    accepted = final_accepted
             
     # 2. Distribute remaining capital dynamically to balance the position size
     remaining = TOTAL_CAPITAL - base_cost
