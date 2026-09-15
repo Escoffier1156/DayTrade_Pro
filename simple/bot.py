@@ -40,7 +40,7 @@ TARGET_URL = "https://kabutan.jp/stock/?code=0000"
 # [/LOCK]
 MIN_AVG_VOLUME = 400_000
 MIN_AVG_TURNOVER = 3_000_000_000
-TP_PCT = 1.5
+TP_PCT = 1.0
 SL_PCT = 2.0
 NIKKEI_STRONG = 0.5
 NIKKEI_WEAK = -0.5
@@ -185,7 +185,7 @@ def run_fetch_yesterday():
                 "sector": m.get("S33Nm", ""),
                 "avg_volume": avg_vo,
                 "avg_turnover": avg_va,
-                "latest_close": float(bars[-1].get("C", 0))
+                "latest_close": float(bars[-1].get("C") or 0)
             }
             
     print(f"Universe generation complete: {len(universe)} symbols")
@@ -423,6 +423,8 @@ def run_intraday_monitor(iteration_count: int):
             for t in targets:
                 if t["code"] in latest_targets and "manual_action" in latest_targets[t["code"]]:
                     t["manual_action"] = latest_targets[t["code"]]["manual_action"]
+                    if "action_price" in latest_targets[t["code"]]:
+                        t["action_price"] = latest_targets[t["code"]]["action_price"]
         except Exception as e:
             print(f"Failed to reload targets for manual_action: {e}")
             
@@ -440,15 +442,14 @@ def run_intraday_monitor(iteration_count: int):
             
             if not t["history"] or t["history"][-1]["time"] < current_minute_ts:
                 t["history"].append({"time": current_minute_ts, "value": px})
-            else:
-                t["history"][-1]["value"] = px
             
             updated = True
             
             # Check for manual overrides from the UI
             if t.get("manual_action"):
                 action = t.pop("manual_action")
-                pnl = (px - t["entry_price"]) * t["shares"] if px else 0
+                exec_px = t.pop("action_price", px)
+                pnl = (exec_px - t["entry_price"]) * t["shares"] if exec_px else 0
                 
                 if action == "CANCEL_TP" and t["status"] == "HIT_TP":
                     t["status"] = "OPEN"
@@ -462,16 +463,16 @@ def run_intraday_monitor(iteration_count: int):
                     if action == "TP":
                         t["status"] = "HIT_TP"
                         now_str = _dt.datetime.now().strftime('%H:%M:%S')
-                        record_trade(code, t['name'], "SELL(MANUAL_TP)", t["shares"], px, pnl)
-                        slack_post(f"[手動利確] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {t['entry_price']:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定利益: +{pnl:,.0f} 円")
-                        print(f"{code} MANUAL TP! {px}")
+                        record_trade(code, t['name'], "SELL(MANUAL_TP)", t["shares"], exec_px, pnl)
+                        slack_post(f"[手動利確] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {t['entry_price']:,.1f} 円\n売値(現在値): {exec_px:,.1f} 円\n確定利益: +{pnl:,.0f} 円")
+                        print(f"{code} MANUAL TP! {exec_px}")
                         updated = True
                     elif action == "SL":
                         t["status"] = "HIT_SL"
                         now_str = _dt.datetime.now().strftime('%H:%M:%S')
-                        record_trade(code, t['name'], "SELL(MANUAL_SL)", t["shares"], px, pnl)
-                        slack_post(f"[手動損切] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {t['entry_price']:,.1f} 円\n売値(現在値): {px:,.1f} 円\n確定損失: {pnl:,.0f} 円")
-                        print(f"{code} MANUAL SL! {px}")
+                        record_trade(code, t['name'], "SELL(MANUAL_SL)", t["shares"], exec_px, pnl)
+                        slack_post(f"[手動損切] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {t['entry_price']:,.1f} 円\n売値(現在値): {exec_px:,.1f} 円\n確定損失: {pnl:,.0f} 円")
+                        print(f"{code} MANUAL SL! {exec_px}")
                         updated = True
                 continue
             

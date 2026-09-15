@@ -365,3 +365,67 @@ body {
 .ticker-down {
   color: var(--text-red);
 }
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  body {
+    overflow-y: auto;
+    min-height: 100vh;
+  }
+  .terminal-container {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto 300px 300px auto;
+    grid-template-areas:
+      "header"
+      "watchlist"
+      "chart"
+      "log"
+      "stats";
+    min-height: 100vh;
+    overflow-y: auto;
+  }
+  
+  .terminal-header {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 10px;
+    gap: 10px;
+  }
+  
+  .ticker-tape-container {
+    margin: 5px 0;
+    width: 100%;
+  }
+  
+  .header-right {
+    display: flex;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px;
+    width: 100%;
+  }
+  
+  .header-right .search-container {
+    margin-right: 0 !important;
+  }
+  
+  .header-right span, .header-right button {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+  
+  .panel-log {
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+  }
+  
+  .panel-watchlist {
+    height: auto;
+    min-height: 120px;
+  }
+  
+  .resize-handle-x, .resize-handle-y {
+    display: none;
+  }
+}

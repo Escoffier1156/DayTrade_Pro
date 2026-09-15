@@ -34,9 +34,12 @@ document.addEventListener('click', () => {
 async function handleManualAction(action: 'TP' | 'SL' | 'CANCEL_TP' | 'REMOVE') {
   if (!contextMenuTarget) return;
   
+  const targetObj = targetsData.find(t => t.code === contextMenuTarget);
+  const actionPrice = targetObj ? targetObj.latest_price : null;
+
   let msg = '';
-  if (action === 'TP') msg = `【${contextMenuTarget}】の利確を実行しますか？`;
-  else if (action === 'SL') msg = `【${contextMenuTarget}】の損切を実行しますか？`;
+  if (action === 'TP') msg = `【${contextMenuTarget}】の利確を実行しますか？ (実行価格: ${actionPrice}円)`;
+  else if (action === 'SL') msg = `【${contextMenuTarget}】の損切を実行しますか？ (実行価格: ${actionPrice}円)`;
   else if (action === 'CANCEL_TP') msg = `【${contextMenuTarget}】の利確を取り消してOPENに戻しますか？`;
   else if (action === 'REMOVE') msg = `【${contextMenuTarget}】を監視リストから完全に削除しますか？`;
   
@@ -46,7 +49,7 @@ async function handleManualAction(action: 'TP' | 'SL' | 'CANCEL_TP' | 'REMOVE') 
     const res = await fetch('/api/action?k=l5cL0jRp9Yzcj_dRutcc43zNmZG0oOFb', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ticker: contextMenuTarget, action })
+      body: JSON.stringify({ ticker: contextMenuTarget, action, price: actionPrice })
     });
     if (res.ok) {
       alert('リクエストを送信しました！(数秒後に反映されます)');

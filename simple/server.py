@@ -338,6 +338,7 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
                 payload = json.loads(post_data.decode('utf-8'))
                 ticker = payload.get("ticker")
                 action = payload.get("action")
+                price = payload.get("price")
                 
                 if not ticker or action not in ["TP", "SL", "CANCEL_TP", "REMOVE"]:
                     self.send_error(400, "Bad Request")
@@ -360,6 +361,8 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
                                 # Allow CANCEL_TP even if status is not OPEN
                                 if action == "CANCEL_TP" or t["status"] == "OPEN":
                                     t["manual_action"] = action
+                                    if price is not None:
+                                        t["action_price"] = price
                                     updated = True
                                     break
                                 

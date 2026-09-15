@@ -8,3 +8,5 @@ __pycache__/
 *.pyc
 web/node_modules/
 web/dist/
+test_*.py
+scratch_*.py
