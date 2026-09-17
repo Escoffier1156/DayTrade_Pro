@@ -5,25 +5,25 @@
       "file_path": "simple/bot.py",
       "lock_index": 0,
       "mode": "strict",
-      "strict_hash": "392f5979df5b31e6e5f8e2e3f32235bc3d787c475d8d120774bf06b7f298f222",
-      "ast_hash": "b90683471d06de291e239d876732aed1618205c604d1a0e99bc16316912899af",
-      "original_code": "# Kabutan Screener\nTARGET_URLS = [\n    \"https://kabutan.jp/warning/?mode=2_9\",\n    \"https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=-1&dispmode=normal&stc=&stm=0&page=2\",\n    \"https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=-1&dispmode=normal&stc=&stm=0&page=3\",\n    \"https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=-1&dispmode=normal&stc=&stm=0&page=4\",\n    \"https://kabutan.jp/warning/?mode=2_9&capitalization=3&dispmode=normal\",\n    \"https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=3&dispmode=normal&stc=&stm=0&page=2\",\n    \"https://kabutan.jp/warning/?mode=2_9&market=0&capitalization=3&dispmode=normal&stc=&stm=0&page=3\"\n]",
+      "strict_hash": "44a17d9460990214bcfaf29c6a0de8088aa9b0f3776cc03ab97f9194021cbebc",
+      "ast_hash": "51732014ad924bb58956c36151d16aeb8de5fa26c1a3515074f8de4b855a281d",
+      "original_code": "# Kabutan Screener\nTARGET_URL = \"https://kabutan.jp/stock/?code=0000\"",
       "cached_counterexamples": [],
       "target_symbol": null,
       "start_line": 37,
-      "end_line": 48
+      "end_line": 40
     },
     "simple/bot.py#lock_1": {
       "file_path": "simple/bot.py",
       "lock_index": 1,
       "mode": "strict",
-      "strict_hash": "f969903cf35f2d05327c09b1b64d269b85bed2fb5b63124b49d99fdeb830e590",
-      "ast_hash": "cc6ffb675f0b04cee9ac430d1d611f0f6e0edb67852ad52785f2c4d475919fbc",
-      "original_code": "    filtered = []\n    for r in all_rows:\n        u = universe.get(r[\"code\"])\n        # 硬い銘柄: Turnover >= 3 billion, Price >= 500, 0.0% <= change_pct < +5.0%\n        if u and u[\"avg_volume\"] >= MIN_AVG_VOLUME and u[\"avg_turnover\"] >= MIN_AVG_TURNOVER and r.get(\"price\", 0) >= 500:\n            cp = r.get(\"change_pct\", 0)\n            if cp is not None and 0.0 <= cp < 5.0:\n                r.update({\"avg_volume\": u[\"avg_volume\"], \"avg_turnover\": u[\"avg_turnover\"], \"sector\": u[\"sector\"]})\n                filtered.append(r)\n            \n    filtered.sort(key=lambda x: -(x[\"change_pct\"] or -99))",
+      "strict_hash": "9acd3e5adb80c9b5faf14ecd2995ed51e8b081fd99b7f6f8ffeaa25e58a8abe8",
+      "ast_hash": "34d5ccb55a95b3b9d02c95b9defb8d2986e06418b57fccb56342e2f887b43fe6",
+      "original_code": "    filtered = []\n    for r in all_rows:\n        u = universe.get(r[\"code\"])\n        sector = u[\"sector\"] if u else \"日経225\"\n        r[\"sector\"] = sector\n        filtered.append(r)",
       "cached_counterexamples": [],
       "target_symbol": null,
-      "start_line": 272,
-      "end_line": 284
+      "start_line": 266,
+      "end_line": 273
     },
     "simple/bot.py#lock_2": {
       "file_path": "simple/bot.py",
@@ -34,8 +34,8 @@
       "original_code": "            # --- 08:55 : fetch_yesterday (Generate J-Quants Universe) ---\n            if now.hour == 8 and now.minute >= 55 and get_last_run(\"fetch\") != today_str:\n                print(f\"[{now.strftime('%H:%M:%S')}] Executing: run_fetch_yesterday()\")\n                try: run_fetch_yesterday()\n                except Exception as e: print(f\"fetch_yesterday Error: {e}\")\n                set_last_run(\"fetch\", today_str)\n                \n            # --- 09:10 : morning_screener (Kabutan Screening) ---\n            if now.hour == 9 and now.minute >= 10 and now.minute < 30 and get_last_run(\"screener\") != today_str:\n                print(f\"[{now.strftime('%H:%M:%S')}] Executing: run_morning_screener()\")\n                try: run_morning_screener()\n                except Exception as e: print(f\"morning_screener Error: {e}\")",
       "cached_counterexamples": [],
       "target_symbol": null,
-      "start_line": 481,
-      "end_line": 494
+      "start_line": 621,
+      "end_line": 634
     }
   }
 }

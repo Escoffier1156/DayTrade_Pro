@@ -286,29 +286,46 @@ def run_morning_screener():
         f"※主役銘柄（寄与度トップ）と値がさ株を優先して組み込みます\n"
     ]
     
-    accepted = []
-    base_cost = 0
+    print("Fetching real-time prices for top candidates to prevent lag-based bad picks...")
+    top_cands = filtered[:15]
+    live_prices = fetch_bulk_prices(top_cands, cookie)
     
-    if boss:
-        accepted.append(boss)
+    verified_filtered = []
+    for r in top_cands:
+        code = r["code"]
+        if code in live_prices:
+            live_px = live_prices[code]
+            u = universe.get(code)
+            if u and u.get("latest_close"):
+                real_pct = (live_px - u["latest_close"]) / u["latest_close"] * 100
+                r["price"] = live_px
+                r["change_pct"] = real_pct
+                
+                if regime == "Bullish" and real_pct <= 0:
+                    continue
+                elif regime == "Bearish" and real_pct >= 0:
+                    continue
+                
+                verified_filtered.append(r)
+                
+    verified_filtered.sort(key=lambda x: -(abs(x.get("change_pct") or 0)))
+    
+    new_boss = verified_filtered[0] if verified_filtered else None
+    
+    accepted = []
+    if new_boss:
+        accepted.append(new_boss)
         
-    high_priced_cands = [r for r in filtered if r.get("price", 0) >= 30000 and r["code"] != (boss["code"] if boss else "")]
+    high_priced_cands = [r for r in verified_filtered if r.get("price", 0) >= 30000 and r["code"] != (new_boss["code"] if new_boss else "")]
     if high_priced_cands:
         accepted.append(high_priced_cands[0])
             
-    normal_cands = [r for r in filtered if r["code"] not in [a["code"] for a in accepted]]
+    normal_cands = [r for r in verified_filtered if r["code"] not in [a["code"] for a in accepted]]
     for r in normal_cands:
         if len(accepted) >= 3:
             break
         if r.get("price", 0) > 0:
             accepted.append(r)
-            
-    # Fetch real-time prices since table prices are delayed
-    print("Fetching real-time prices for selected candidates...")
-    live_prices = fetch_bulk_prices(accepted, cookie)
-    for a in accepted:
-        if a["code"] in live_prices:
-            a["price"] = live_prices[a["code"]]
             
     # Calculate base cost and new_shares with live prices
     base_cost = 0
