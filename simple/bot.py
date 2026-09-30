@@ -239,8 +239,30 @@ def parse_ranking(doc: str) -> list[dict]:
                 rows.append({"code": code, "name": name, "price": price, "change_pct": pct})
     return rows
 
+def get_todays_cookie() -> str:
+    import glob
+    today = _dt.date.today().strftime("%y-%m-%d")
+    files = glob.glob(str(ROOT / f"*{today}*.har"))
+    if not files: return ""
+    latest = max(files, key=os.path.getmtime)
+    try:
+        with open(latest, "r", encoding="utf-8") as f: har = json.load(f)
+        for entry in har.get('log', {}).get('entries', []):
+            req = entry.get('request', {})
+            if 'kabutan.jp' in req.get('url', ''):
+                for header in req.get('headers', []):
+                    if header.get('name', '').lower() == 'cookie' and '_oboe_jwt' in header.get('value', ''):
+                        return header.get('value', '')
+    except Exception: pass
+    return ""
+
 def run_morning_screener():
-    cookie = load_env("KABUTAN_COOKIE")
+    cookie = get_todays_cookie()
+    if not cookie:
+        msg = "【警告】本日のHARファイルが見つからなかったため、株探のスクリーニングをスキップし、本日の日本株トレードは休止します。"
+        print(msg)
+        slack_post(msg)
+        return
     if not UNIVERSE_FILE.exists():
         print(f"Error: {UNIVERSE_FILE} not found.")
         return
@@ -257,9 +279,9 @@ def run_morning_screener():
         print(f"  URL {TARGET_URL} Fetch failed: {e}")
             
     n_pct = nikkei.get("pct", 0)
-    if n_pct >= NIKKEI_STRONG: pick_count, regime = 5, "Bullish"
-    elif n_pct <= NIKKEI_WEAK: pick_count, regime = 3, "Bearish"
-    else: pick_count, regime = 4, "Neutral"
+    if n_pct >= NIKKEI_STRONG: pick_count, regime = 3, "Bullish"
+    elif n_pct <= NIKKEI_WEAK: pick_count, regime = 2, "Bearish"
+    else: pick_count, regime = 2, "Neutral"
         
     print(f"\nNikkei Average: {n_pct:+.2f}% ({regime}) -> Picking {pick_count} symbols")
     
@@ -300,11 +322,6 @@ def run_morning_screener():
                 real_pct = (live_px - u["latest_close"]) / u["latest_close"] * 100
                 r["price"] = live_px
                 r["change_pct"] = real_pct
-                
-                if regime == "Bullish" and real_pct <= 0:
-                    continue
-                elif regime == "Bearish" and real_pct >= 0:
-                    continue
                 
                 verified_filtered.append(r)
                 
@@ -426,7 +443,8 @@ def run_intraday_monitor(iteration_count: int):
         
     if data.get("date") != _dt.date.today().isoformat(): return
         
-    cookie = load_env("KABUTAN_COOKIE")
+    cookie = get_todays_cookie()
+    if not cookie: return
     targets = data.get("targets", [])
     updated = False
     
@@ -481,14 +499,14 @@ def run_intraday_monitor(iteration_count: int):
                         t["status"] = "HIT_TP"
                         now_str = _dt.datetime.now().strftime('%H:%M:%S')
                         record_trade(code, t['name'], "SELL(MANUAL_TP)", t["shares"], exec_px, pnl)
-                        slack_post(f"[手動利確] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {t['entry_price']:,.1f} 円\n売値(現在値): {exec_px:,.1f} 円\n確定利益: +{pnl:,.0f} 円")
+                        slack_post(f"[手動利確] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {t['entry_price']:,.1f} 円\n売値(現在値): {exec_px:,.1f} 円\n確定損益: {pnl:+,.0f} 円")
                         print(f"{code} MANUAL TP! {exec_px}")
                         updated = True
                     elif action == "SL":
                         t["status"] = "HIT_SL"
                         now_str = _dt.datetime.now().strftime('%H:%M:%S')
                         record_trade(code, t['name'], "SELL(MANUAL_SL)", t["shares"], exec_px, pnl)
-                        slack_post(f"[手動損切] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {t['entry_price']:,.1f} 円\n売値(現在値): {exec_px:,.1f} 円\n確定損失: {pnl:,.0f} 円")
+                        slack_post(f"[手動損切] {code} {t['name']}\n実行時間: {now_str}\n買値(エントリー): {t['entry_price']:,.1f} 円\n売値(現在値): {exec_px:,.1f} 円\n確定損益: {pnl:+,.0f} 円")
                         print(f"{code} MANUAL SL! {exec_px}")
                         updated = True
                 continue
@@ -613,8 +631,8 @@ def main():
             today_str = now.date().isoformat()
             time_hm = now.hour * 100 + now.minute
             
-            # Skip execution on weekends (Saturday=5, Sunday=6)
-            if now.weekday() >= 5:
+            # Skip execution on weekends and Japanese public holidays
+            if now.weekday() >= 5 or today_str in ["2026-09-21", "2026-09-22", "2026-09-23"]:
                 time.sleep(60)
                 continue
                 
