@@ -482,8 +482,11 @@ async function sync() {
     updateUnrealizedPnL();
     renderTickerTape();
     
-  } catch (err) {
+  } catch (err: any) {
     console.error("Failed to sync data:", err);
+    if (err.message && err.message.includes("403")) {
+      document.body.innerHTML = "<h2 style='color: #ef4444; padding: 20px; text-align: center;'>認証エラー: アクセス権限がありません。<br>正しいURL（?k=...付き）でアクセスしてください。</h2>";
+    }
   }
 }
 

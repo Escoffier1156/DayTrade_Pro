@@ -35,6 +35,11 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(DIST_DIR), **kwargs)
 
+    def end_headers(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        super().end_headers()
+
     def send_custom_error(self, code, message):
         self.send_response(code)
         self.send_header('Content-Type', 'text/plain; charset=utf-8')
@@ -54,7 +59,6 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-cache")
             # Allow CORS (for development)
-            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             
             try:
@@ -76,7 +80,6 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-cache")
             # Allow CORS (for development)
-            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             
             try:
@@ -94,7 +97,6 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
                 
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             
             try:
@@ -371,7 +373,6 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
                         
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 self.wfile.write(json.dumps({"status": "success"}).encode("utf-8"))
             except Exception as e:
@@ -394,7 +395,6 @@ class SimpleAPIHandler(http.server.SimpleHTTPRequestHandler):
                 
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 self.wfile.write(json.dumps({"status": "success"}).encode("utf-8"))
             except Exception as e:
